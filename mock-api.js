@@ -627,26 +627,33 @@
       const resGate = await dbGetConfig('gateway_settings', { gatewayName: 'simulado' });
       if (resGate.gatewayName === 'vizzionpay') {
         try {
-          const vizzionRes = await originalFetch('https://app.vizzionpay.com.br/api/v1/pix', {
+          const vizzionRes = await originalFetch('https://app.vizzionpay.com.br/api/v1/gateway/pix/receive', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              'client-id': resGate.clientId || 'loughanpk2001_j0np7mhexk9ws65u',
-              'client-secret': resGate.clientSecret || '6700v7cpkqx7dgn474oi9bmh6mcqah5hikzms3tzzj5d5ij129pb2pqpyuo9wd2q'
+              'x-public-key': resGate.clientId || 'loughanpk2001_j0np7mhexk9ws65u',
+              'x-secret-key': resGate.clientSecret || '6700v7cpkqx7dgn474oi9bmh6mcqah5hikzms3tzzj5d5ij129pb2pqpyuo9wd2q'
             },
             body: JSON.stringify({
-              amount: (amountCents / 100),
-              external_id: txid,
-              callback_url: window.location.origin + '/api/webhook/vizzionpay'
+              identifier: txid,
+              amount: amountCents / 100,
+              client: {
+                name: user.name || "Jogador BlockWin",
+                email: user.email || (user.phone + "@blockwin.com"),
+                phone: user.phone,
+                document: user.cpf || "12345678909"
+              },
+              callbackUrl: window.location.origin + '/api/webhook/vizzionpay'
             })
           });
           if (vizzionRes.ok) {
             const vizzionData = await vizzionRes.json();
-            if (vizzionData.pix_code) pixCode = vizzionData.pix_code;
-            else if (vizzionData.pixCode) pixCode = vizzionData.pixCode;
-            
-            if (vizzionData.qrcode) qrcode = vizzionData.qrcode;
-            else if (vizzionData.qrCode) qrcode = vizzionData.qrCode;
+            if (vizzionData.pix && vizzionData.pix.code) {
+              pixCode = vizzionData.pix.code;
+              qrcode = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(pixCode)}`;
+            }
+          } else {
+            console.warn("[Vizzionpay API] API response error:", await vizzionRes.text());
           }
         } catch (e) {
           console.warn("[Vizzionpay API] Calling Vizzionpay failed, falling back to simulated credentials.", e);
