@@ -1,0 +1,1264 @@
+{
+  "users": {
+    "11999999999": {
+      "name": "Jogador Teste",
+      "phone": "11999999999",
+      "password": "password123",
+      "referralCode": "9Q9Z25Q2",
+      "balanceCents": 1500,
+      "comissao_saldo_cents": 0,
+      "totalCommissionCents": 0,
+      "indicados_count": 0,
+      "gamesPlayed": 1,
+      "gamesWon": 0,
+      "totalWonCents": 0,
+      "biggestWinCents": 0,
+      "referredBy": null
+    },
+    "21980987979": {
+      "name": "lgn",
+      "phone": "21980987979",
+      "password": "123456",
+      "referralCode": "H4BKS4RO",
+      "balanceCents": 200,
+      "comissao_saldo_cents": 0,
+      "totalCommissionCents": 0,
+      "indicados_count": 0,
+      "gamesPlayed": 6,
+      "gamesWon": 0,
+      "totalWonCents": 0,
+      "biggestWinCents": 0,
+      "referredBy": null
+    }
+  },
+  "transactions": [
+    {
+      "id": "TXGHW82L1X5",
+      "phone": "11999999999",
+      "type": "DEPOSIT",
+      "status": "COMPLETED",
+      "amountCents": 2000,
+      "pixCode": "00020101021126580014br.gov.bcb.pix0136blockwin-simulated-keys-pix-keys0218BlockWin Game Play520400005303986540520.005802BR5915BLOCKWIN JOGOS6009SAO PAULO62170513TXGHW82L1X56304FC3C",
+      "qrcode": "https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=00020101021126580014br.gov.bcb.pix0136blockwin-simulated-keys-pix-keys0218BlockWin%20Game%20Play520400005303986540520.005802BR5915BLOCKWIN%20JOGOS6009SAO%20PAULO62170513TXGHW82L1X56304FC3C",
+      "txid": "TXGHW82L1X5",
+      "createdAt": "2026-07-21T05:05:58.957Z"
+    },
+    {
+      "id": "TX1T6IWH9AB",
+      "phone": "21980987979",
+      "type": "DEPOSIT",
+      "status": "COMPLETED",
+      "amountCents": 2000,
+      "pixCode": "00020101021126580014br.gov.bcb.pix0136blockwin-simulated-keys-pix-keys0218BlockWin Game Play520400005303986540520.005802BR5915BLOCKWIN JOGOS6009SAO PAULO62170513TX1T6IWH9AB6304FC3C",
+      "qrcode": "https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=00020101021126580014br.gov.bcb.pix0136blockwin-simulated-keys-pix-keys0218BlockWin%20Game%20Play520400005303986540520.005802BR5915BLOCKWIN%20JOGOS6009SAO%20PAULO62170513TX1T6IWH9AB6304FC3C",
+      "txid": "TX1T6IWH9AB",
+      "createdAt": "2026-07-21T05:09:12.350Z"
+    }
+  ],
+  "games": {
+    "G5CC62COLD": {
+      "id": "G5CC62COLD",
+      "phone": "11999999999",
+      "status": "LOST",
+      "betCents": 500,
+      "accumulatedCents": 0,
+      "targetCents": 1000,
+      "targetMultiplier": 2,
+      "board": [
+        [
+          1,
+          1,
+          1,
+          1,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      ],
+      "tray": [
+        {
+          "cells": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              1
+            ],
+            [
+              0,
+              2
+            ],
+            [
+              0,
+              3
+            ]
+          ],
+          "width": 4,
+          "height": 1,
+          "colorId": 1,
+          "available": false
+        },
+        {
+          "cells": [
+            [
+              0,
+              0
+            ],
+            [
+              1,
+              0
+            ],
+            [
+              1,
+              1
+            ],
+            [
+              2,
+              1
+            ]
+          ],
+          "width": 2,
+          "height": 3,
+          "colorId": 1,
+          "available": true
+        },
+        {
+          "cells": [
+            [
+              0,
+              0
+            ],
+            [
+              1,
+              0
+            ],
+            [
+              2,
+              0
+            ],
+            [
+              3,
+              0
+            ]
+          ],
+          "width": 1,
+          "height": 4,
+          "colorId": 3,
+          "available": true
+        }
+      ],
+      "createdAt": "2026-07-21T05:06:04.980Z"
+    },
+    "GOZZ1VTUFO": {
+      "id": "GOZZ1VTUFO",
+      "phone": "21980987979",
+      "status": "LOST",
+      "betCents": 300,
+      "accumulatedCents": 90,
+      "targetCents": 600,
+      "targetMultiplier": 2,
+      "board": [
+        [
+          5,
+          0,
+          0,
+          5,
+          5,
+          5,
+          5,
+          1
+        ],
+        [
+          5,
+          3,
+          2,
+          5,
+          5,
+          0,
+          5,
+          0
+        ],
+        [
+          5,
+          2,
+          2,
+          2,
+          5,
+          0,
+          5,
+          0
+        ],
+        [
+          5,
+          3,
+          2,
+          5,
+          0,
+          3,
+          3,
+          3
+        ],
+        [
+          5,
+          2,
+          2,
+          2,
+          0,
+          3,
+          3,
+          3
+        ],
+        [
+          0,
+          0,
+          6,
+          6,
+          7,
+          3,
+          3,
+          3
+        ],
+        [
+          0,
+          6,
+          6,
+          0,
+          0,
+          0,
+          0,
+          7
+        ],
+        [
+          0,
+          5,
+          5,
+          5,
+          5,
+          5,
+          7,
+          7
+        ]
+      ],
+      "tray": [
+        {
+          "cells": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              1
+            ],
+            [
+              0,
+              2
+            ],
+            [
+              1,
+              2
+            ],
+            [
+              2,
+              2
+            ]
+          ],
+          "width": 3,
+          "height": 3,
+          "colorId": 5,
+          "available": false
+        },
+        {
+          "cells": [
+            [
+              0,
+              1
+            ],
+            [
+              1,
+              0
+            ],
+            [
+              1,
+              1
+            ],
+            [
+              2,
+              1
+            ]
+          ],
+          "width": 2,
+          "height": 3,
+          "colorId": 3,
+          "available": true
+        },
+        {
+          "cells": [
+            [
+              0,
+              0
+            ]
+          ],
+          "width": 1,
+          "height": 1,
+          "colorId": 1,
+          "available": false
+        }
+      ],
+      "createdAt": "2026-07-21T05:09:29.132Z"
+    },
+    "G6JUH6GSUE": {
+      "id": "G6JUH6GSUE",
+      "phone": "21980987979",
+      "status": "LOST",
+      "betCents": 300,
+      "accumulatedCents": 270,
+      "targetCents": 600,
+      "targetMultiplier": 2,
+      "board": [
+        [
+          4,
+          4,
+          6,
+          6,
+          2,
+          2,
+          2,
+          0
+        ],
+        [
+          4,
+          0,
+          6,
+          0,
+          4,
+          0,
+          2,
+          0
+        ],
+        [
+          4,
+          4,
+          6,
+          0,
+          4,
+          4,
+          2,
+          3
+        ],
+        [
+          4,
+          4,
+          6,
+          3,
+          4,
+          0,
+          2,
+          0
+        ],
+        [
+          4,
+          1,
+          0,
+          3,
+          0,
+          0,
+          2,
+          6
+        ],
+        [
+          4,
+          4,
+          1,
+          6,
+          0,
+          0,
+          2,
+          6
+        ],
+        [
+          0,
+          0,
+          1,
+          6,
+          0,
+          0,
+          2,
+          6
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      ],
+      "tray": [
+        {
+          "cells": [
+            [
+              0,
+              0
+            ],
+            [
+              1,
+              0
+            ],
+            [
+              2,
+              0
+            ],
+            [
+              3,
+              0
+            ]
+          ],
+          "width": 1,
+          "height": 4,
+          "colorId": 6,
+          "available": false
+        },
+        {
+          "cells": [
+            [
+              0,
+              0
+            ],
+            [
+              1,
+              0
+            ],
+            [
+              1,
+              1
+            ],
+            [
+              2,
+              0
+            ]
+          ],
+          "width": 2,
+          "height": 3,
+          "colorId": 4,
+          "available": false
+        },
+        {
+          "cells": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              1
+            ],
+            [
+              0,
+              2
+            ],
+            [
+              1,
+              0
+            ],
+            [
+              2,
+              0
+            ]
+          ],
+          "width": 3,
+          "height": 3,
+          "colorId": 3,
+          "available": true
+        }
+      ],
+      "createdAt": "2026-07-21T05:11:15.529Z"
+    },
+    "G7YO7ZQWT3": {
+      "id": "G7YO7ZQWT3",
+      "phone": "21980987979",
+      "status": "LOST",
+      "betCents": 300,
+      "accumulatedCents": 60,
+      "targetCents": 600,
+      "targetMultiplier": 2,
+      "board": [
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          4,
+          4,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          4,
+          4,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          2,
+          2,
+          2,
+          2,
+          0,
+          7
+        ],
+        [
+          0,
+          0,
+          3,
+          3,
+          3,
+          3,
+          0,
+          7
+        ],
+        [
+          6,
+          6,
+          3,
+          3,
+          3,
+          3,
+          0,
+          7
+        ],
+        [
+          1,
+          1,
+          1,
+          1,
+          0,
+          0,
+          0,
+          7
+        ]
+      ],
+      "tray": [
+        {
+          "cells": [
+            [
+              0,
+              2
+            ],
+            [
+              1,
+              2
+            ],
+            [
+              2,
+              0
+            ],
+            [
+              2,
+              1
+            ],
+            [
+              2,
+              2
+            ]
+          ],
+          "width": 3,
+          "height": 3,
+          "colorId": 7,
+          "available": true
+        },
+        {
+          "cells": [
+            [
+              0,
+              1
+            ],
+            [
+              1,
+              0
+            ],
+            [
+              1,
+              1
+            ],
+            [
+              2,
+              0
+            ]
+          ],
+          "width": 2,
+          "height": 3,
+          "colorId": 7,
+          "available": true
+        },
+        {
+          "cells": [
+            [
+              0,
+              0
+            ]
+          ],
+          "width": 1,
+          "height": 1,
+          "colorId": 7,
+          "available": true
+        }
+      ],
+      "createdAt": "2026-07-21T05:12:57.647Z"
+    },
+    "GNFWH7SJTI": {
+      "id": "GNFWH7SJTI",
+      "phone": "21980987979",
+      "status": "LOST",
+      "betCents": 300,
+      "accumulatedCents": 0,
+      "targetCents": 600,
+      "targetMultiplier": 2,
+      "board": [
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      ],
+      "tray": [
+        {
+          "cells": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              1
+            ],
+            [
+              0,
+              2
+            ],
+            [
+              1,
+              0
+            ],
+            [
+              2,
+              0
+            ]
+          ],
+          "width": 3,
+          "height": 3,
+          "colorId": 4,
+          "available": true
+        },
+        {
+          "cells": [
+            [
+              0,
+              0
+            ],
+            [
+              1,
+              0
+            ],
+            [
+              1,
+              1
+            ],
+            [
+              2,
+              1
+            ]
+          ],
+          "width": 2,
+          "height": 3,
+          "colorId": 4,
+          "available": true
+        },
+        {
+          "cells": [
+            [
+              0,
+              1
+            ],
+            [
+              0,
+              2
+            ],
+            [
+              1,
+              0
+            ],
+            [
+              1,
+              1
+            ]
+          ],
+          "width": 3,
+          "height": 2,
+          "colorId": 1,
+          "available": true
+        }
+      ],
+      "createdAt": "2026-07-21T05:14:56.241Z"
+    },
+    "GQUG9JUTMT": {
+      "id": "GQUG9JUTMT",
+      "phone": "21980987979",
+      "status": "LOST",
+      "betCents": 300,
+      "accumulatedCents": 0,
+      "targetCents": 600,
+      "targetMultiplier": 2,
+      "board": [
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          4,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          4,
+          4,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          4,
+          0,
+          0,
+          0,
+          0
+        ]
+      ],
+      "tray": [
+        {
+          "cells": [
+            [
+              0,
+              1
+            ],
+            [
+              0,
+              2
+            ],
+            [
+              1,
+              0
+            ],
+            [
+              1,
+              1
+            ]
+          ],
+          "width": 3,
+          "height": 2,
+          "colorId": 2,
+          "available": true
+        },
+        {
+          "cells": [
+            [
+              0,
+              1
+            ],
+            [
+              1,
+              0
+            ],
+            [
+              1,
+              1
+            ],
+            [
+              2,
+              0
+            ]
+          ],
+          "width": 2,
+          "height": 3,
+          "colorId": 4,
+          "available": false
+        },
+        {
+          "cells": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              1
+            ],
+            [
+              1,
+              0
+            ],
+            [
+              1,
+              1
+            ]
+          ],
+          "width": 2,
+          "height": 2,
+          "colorId": 3,
+          "available": true
+        }
+      ],
+      "createdAt": "2026-07-21T05:15:00.391Z"
+    },
+    "G7Z9E3WPHN": {
+      "id": "G7Z9E3WPHN",
+      "phone": "21980987979",
+      "status": "LOST",
+      "betCents": 300,
+      "accumulatedCents": 0,
+      "targetCents": 600,
+      "targetMultiplier": 2,
+      "board": [
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          4,
+          4,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          4,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      ],
+      "tray": [
+        {
+          "cells": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              1
+            ],
+            [
+              1,
+              1
+            ]
+          ],
+          "width": 2,
+          "height": 2,
+          "colorId": 4,
+          "available": false
+        },
+        {
+          "cells": [
+            [
+              0,
+              0
+            ],
+            [
+              1,
+              0
+            ],
+            [
+              1,
+              1
+            ],
+            [
+              2,
+              0
+            ]
+          ],
+          "width": 2,
+          "height": 3,
+          "colorId": 6,
+          "available": true
+        },
+        {
+          "cells": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              1
+            ],
+            [
+              1,
+              1
+            ]
+          ],
+          "width": 2,
+          "height": 2,
+          "colorId": 6,
+          "available": true
+        }
+      ],
+      "createdAt": "2026-07-21T05:15:02.545Z"
+    }
+  },
+  "history": [
+    {
+      "id": "G5CC62COLD",
+      "phone": "11999999999",
+      "betCents": 500,
+      "accumulatedCents": 0,
+      "status": "LOST",
+      "createdAt": "2026-07-21T05:06:04.995Z"
+    },
+    {
+      "id": "GOZZ1VTUFO",
+      "phone": "21980987979",
+      "betCents": 300,
+      "accumulatedCents": 90,
+      "status": "LOST",
+      "createdAt": "2026-07-21T05:10:21.811Z"
+    },
+    {
+      "id": "G6JUH6GSUE",
+      "phone": "21980987979",
+      "betCents": 300,
+      "accumulatedCents": 270,
+      "status": "LOST",
+      "createdAt": "2026-07-21T05:12:42.917Z"
+    },
+    {
+      "id": "G7YO7ZQWT3",
+      "phone": "21980987979",
+      "betCents": 300,
+      "accumulatedCents": 60,
+      "status": "LOST",
+      "createdAt": "2026-07-21T05:14:55.287Z"
+    },
+    {
+      "id": "GNFWH7SJTI",
+      "phone": "21980987979",
+      "betCents": 300,
+      "accumulatedCents": 0,
+      "status": "LOST",
+      "createdAt": "2026-07-21T05:14:59.811Z"
+    },
+    {
+      "id": "GQUG9JUTMT",
+      "phone": "21980987979",
+      "betCents": 300,
+      "accumulatedCents": 0,
+      "status": "LOST",
+      "createdAt": "2026-07-21T05:15:01.910Z"
+    },
+    {
+      "id": "G7Z9E3WPHN",
+      "phone": "21980987979",
+      "betCents": 300,
+      "accumulatedCents": 0,
+      "status": "LOST",
+      "createdAt": "2026-07-21T05:15:03.845Z"
+    }
+  ]
+}
