@@ -11,7 +11,6 @@ app.use(cookieParser());
 
 // Paths
 const DB_PATH = path.join(__dirname, 'db.json');
-const PUBLIC_DIR = path.join(__dirname, 'public');
 
 // Piece Definitions
 const PIECES_TEMPLATES = [
@@ -906,12 +905,21 @@ app.get('/api/users/stats', (req, res) => {
   });
 });
 
-// Serve frontend assets
-app.use(express.static(PUBLIC_DIR));
+// Serve frontend assets safely
+app.use('/assets', express.static(path.join(__dirname, 'assets')));
+app.use('/images', express.static(path.join(__dirname, 'images')));
+app.use('/audio', express.static(path.join(__dirname, 'audio')));
+
+app.get('/favicon.png', (req, res) => res.sendFile(path.join(__dirname, 'favicon.png')));
+app.get('/apple-touch-icon.png', (req, res) => res.sendFile(path.join(__dirname, 'apple-touch-icon.png')));
+app.get('/apple-touch-icon-180x180.png', (req, res) => res.sendFile(path.join(__dirname, 'apple-touch-icon-180x180.png')));
+app.get('/manifest.json', (req, res) => res.sendFile(path.join(__dirname, 'manifest.json')));
+app.get('/mock-api.js', (req, res) => res.sendFile(path.join(__dirname, 'mock-api.js')));
+app.get('/_redirects', (req, res) => res.sendFile(path.join(__dirname, '_redirects')));
 
 // Handle React router paths by serving index.html
 app.get(['/', '/login', '/cadastro', '/painel', '/jogo'], (req, res) => {
-  res.sendFile(path.join(PUBLIC_DIR, 'index.html'));
+  res.sendFile(path.join(__dirname, 'index.html'));
 });
 
 // Start the server
