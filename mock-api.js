@@ -621,8 +621,8 @@
       }
 
       const txid = 'TX' + Math.random().toString(36).substring(2, 11).toUpperCase();
-      let pixCode = `00020101021126580014br.gov.bcb.pix0136blockwin-simulated-keys-pix-keys0218BlockWin Game Play5204000053039865405${(amountCents / 100).toFixed(2)}5802BR5915BLOCKWIN JOGOS6009SAO PAULO62170513${txid}6304FC3C`;
-      let qrcode = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(pixCode)}`;
+      let pixCode = '';
+      let qrcode = '';
 
       const resGate = await dbGetConfig('gateway_settings', { gatewayName: 'simulado' });
       if (resGate.gatewayName === 'vizzionpay') {
@@ -646,18 +646,28 @@
               callbackUrl: window.location.origin + '/api/webhook/vizzionpay'
             })
           });
+          
           if (vizzionRes.ok) {
             const vizzionData = await vizzionRes.json();
             if (vizzionData.pix && vizzionData.pix.code) {
               pixCode = vizzionData.pix.code;
               qrcode = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(pixCode)}`;
+            } else {
+              return new Response(JSON.stringify({ message: "A gateway Vizzion Pay não retornou os dados do Pix." }), { status: 400 });
             }
           } else {
-            console.warn("[Vizzionpay API] API response error:", await vizzionRes.text());
+            const errText = await vizzionRes.text();
+            console.error("[Vizzionpay API] Error:", errText);
+            return new Response(JSON.stringify({ message: "Erro na Gateway Vizzion Pay: " + errText }), { status: 400 });
           }
         } catch (e) {
-          console.warn("[Vizzionpay API] Calling Vizzionpay failed, falling back to simulated credentials.", e);
+          console.error("[Vizzionpay API] Failed:", e);
+          return new Response(JSON.stringify({ message: "Falha de conexão com a gateway de pagamento Vizzion Pay." }), { status: 500 });
         }
+      } else {
+        // Simulado (apenas se 'simulado' estiver ativo no painel admin)
+        pixCode = `00020101021126580014br.gov.bcb.pix0136blockwin-simulated-keys-pix-keys0218BlockWin Game Play5204000053039865405${(amountCents / 100).toFixed(2)}5802BR5915BLOCKWIN JOGOS6009SAO PAULO62170513${txid}6304FC3C`;
+        qrcode = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(pixCode)}`;
       }
 
       const newTx = {
