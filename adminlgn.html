@@ -423,11 +423,7 @@
       'Content-Type': 'application/json'
     };
 
-    if (sessionStorage.getItem('admin_authenticated') === 'true') {
-      document.getElementById('login-container').style.display = 'none';
-      document.getElementById('dashboard-container').style.display = 'flex';
-      loadDashboardData();
-    }
+    let pollingInterval = null;
 
     window.attemptLogin = function() {
       const user = document.getElementById('admin-user').value;
@@ -437,15 +433,17 @@
         document.getElementById('login-error').style.display = 'none';
         document.getElementById('login-container').style.display = 'none';
         document.getElementById('dashboard-container').style.display = 'flex';
-        sessionStorage.setItem('admin_authenticated', 'true');
+        
         loadDashboardData();
+        if (pollingInterval) clearInterval(pollingInterval);
+        pollingInterval = setInterval(loadDashboardData, 5000);
       } else {
         document.getElementById('login-error').style.display = 'block';
       }
     };
 
     window.logoutAdmin = function() {
-      sessionStorage.removeItem('admin_authenticated');
+      if (pollingInterval) clearInterval(pollingInterval);
       document.getElementById('login-container').style.display = 'flex';
       document.getElementById('dashboard-container').style.display = 'none';
     };
