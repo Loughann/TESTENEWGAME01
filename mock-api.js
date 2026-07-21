@@ -1662,7 +1662,7 @@
                   <td>
                     <div class="balance-editor">
                       <input type="number" id="inp-bal-\${p.phone}" value="\${(p.balance_cents / 100).toFixed(2)}" step="1">
-                      <button class="btn-save-balance" onclick="updateUserBalance('\&apos;\${p.phone}\&apos;')">Salvar</button>
+                      <button class="btn-save-balance" onclick="updateUserBalance('\\\${p.phone}')">Salvar</button>
                     </div>
                   </td>
                 \`;
@@ -1682,7 +1682,7 @@
                   <td style="color: var(--success);">R$ \${(inf.total_commission_cents / 100).toFixed(2)}</td>
                   <td style="color: var(--gold); font-weight: 600;">R$ \${(inf.comissao_saldo_cents / 100).toFixed(2)}</td>
                   <td>
-                    <button class="btn-action btn-success" onclick="adjustInfluencerComission('\&apos;\${inf.phone}\&apos;')">Ajustar Saldo</button>
+                    <button class="btn-action btn-success" onclick="adjustInfluencerComission('\\\${inf.phone}')">Ajustar Saldo</button>
                   </td>
                 \`;
                 influencersTbody.appendChild(tr);
@@ -1699,8 +1699,8 @@
                 let actionBtn = '-';
                 if (t.status === 'PENDING') {
                   actionBtn = \`
-                    <button class="btn-action btn-success" onclick="resolveTransaction('\&apos;\${t.id}\&apos;', \&apos;COMPLETED\&apos;, \&apos;\${t.phone}\&apos;, \${t.amount_cents})">Aprovar</button>
-                    <button class="btn-action btn-danger" onclick="resolveTransaction('\&apos;\${t.id}\&apos;', \&apos;REJECTED\&apos;, \&apos;\${t.phone}\&apos;)">Recusar</button>
+                    <button class="btn-action btn-success" onclick="resolveTransaction('\\\${t.id}', 'COMPLETED', '\\\${t.phone}', \\\${t.amount_cents})">Aprovar</button>
+                    <button class="btn-action btn-danger" onclick="resolveTransaction('\\\${t.id}', 'REJECTED', '\\\${t.phone}')">Recusar</button>
                   \`;
                 }
 
