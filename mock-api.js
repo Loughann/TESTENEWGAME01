@@ -42,6 +42,29 @@
     { cells: [[0, 0], [1, 0], [1, 1], [2, 1]], width: 2, height: 3 }
   ];
 
+  const EASY_TEMPLATES = [
+    { cells: [[0, 0]], width: 1, height: 1 },
+    { cells: [[0, 0], [0, 1]], width: 2, height: 1 },
+    { cells: [[0, 0], [1, 0]], width: 1, height: 2 },
+    { cells: [[0, 0], [0, 1], [0, 2]], width: 3, height: 1 },
+    { cells: [[0, 0], [1, 0], [2, 0]], width: 1, height: 3 },
+    { cells: [[0, 0], [0, 1], [1, 0], [1, 1]], width: 2, height: 2 },
+    { cells: [[0, 0], [1, 0], [1, 1]], width: 2, height: 2 },
+    { cells: [[0, 1], [1, 0], [1, 1]], width: 2, height: 2 },
+    { cells: [[0, 0], [0, 1], [1, 0]], width: 2, height: 2 },
+    { cells: [[0, 0], [0, 1], [1, 1]], width: 2, height: 2 }
+  ];
+
+  const HARD_TEMPLATES = [
+    { cells: [[0, 0], [0, 1], [0, 2], [0, 3], [0, 4]], width: 5, height: 1 },
+    { cells: [[0, 0], [1, 0], [2, 0], [3, 0], [4, 0]], width: 1, height: 5 },
+    { cells: [[0, 0], [0, 1], [0, 2], [1, 0], [1, 1], [1, 2], [2, 0], [2, 1], [2, 2]], width: 3, height: 3 },
+    { cells: [[0, 0], [1, 0], [2, 0], [2, 1], [2, 2]], width: 3, height: 3 },
+    { cells: [[0, 2], [1, 2], [2, 0], [2, 1], [2, 2]], width: 3, height: 3 },
+    { cells: [[0, 0], [0, 1], [0, 2], [1, 0], [2, 0]], width: 3, height: 3 },
+    { cells: [[0, 0], [0, 1], [0, 2], [1, 2], [2, 2]], width: 3, height: 3 }
+  ];
+
   // Ads Pixel Tracking Helper
   function trackEvent(name, data = {}) {
     try {
@@ -250,10 +273,37 @@
     return false;
   }
 
-  function generateTray() {
+  async function getPlayerRtp(phone) {
+    if (!phone) return 70;
+    try {
+      const p = await dbGetProfile(phone);
+      if (!p) return 70;
+      if (p.rtp !== undefined && p.rtp !== null) {
+        return Number(p.rtp);
+      }
+      const isInfluencer = Number(p.indicados_count) > 0 || Number(p.total_commission_cents) > 0;
+      const config = await dbGetConfig('game_settings', { rtp_normal: 70, rtp_influencer: 95 });
+      if (isInfluencer) {
+        return config.rtp_influencer !== undefined ? Number(config.rtp_influencer) : 95;
+      } else {
+        return config.rtp_normal !== undefined ? Number(config.rtp_normal) : 70;
+      }
+    } catch (e) {
+      return 70;
+    }
+  }
+
+  async function generateTray(phone) {
+    const rtp = await getPlayerRtp(phone);
     const tray = [];
     for (let i = 0; i < 3; i++) {
-      const template = PIECES_TEMPLATES[Math.floor(Math.random() * PIECES_TEMPLATES.length)];
+      const roll = Math.random() * 100;
+      let template;
+      if (roll < rtp) {
+        template = EASY_TEMPLATES[Math.floor(Math.random() * EASY_TEMPLATES.length)];
+      } else {
+        template = HARD_TEMPLATES[Math.floor(Math.random() * HARD_TEMPLATES.length)];
+      }
       tray.push({
         cells: template.cells,
         width: template.width,
@@ -828,7 +878,7 @@
           target_cents: Math.round(betCents * targetMultiplier),
           target_multiplier: targetMultiplier,
           board: Array(8).fill(0).map(() => Array(8).fill(0)),
-          tray: generateTray()
+          tray: await generateTray(user.phone)
         };
 
         await dbCreateGame(newGame);
@@ -906,7 +956,7 @@
 
         const allUsed = game.tray.every(p => !p.available);
         if (allUsed) {
-          game.tray = generateTray();
+          game.tray = await generateTray(user.phone);
         }
 
         let gameOver = true;

@@ -226,6 +226,7 @@
                   <th>Comissões</th>
                   <th>Partidas</th>
                   <th>Convidado Por</th>
+                  <th>RTP (%)</th>
                   <th>Editar Saldo (R$)</th>
                 </tr>
               </thead>
@@ -380,6 +381,19 @@
               <p style="font-size: 0.8rem; color: var(--text-dim); margin-top: 8px; margin-bottom: 0;">Define a porcentagem de bônus que QUALQUER jogador ganhará automaticamente em seu primeiro depósito na plataforma (ex: 100 para 100% de bônus).</p>
             </div>
 
+            <div class="grid-2" style="margin-bottom: 20px;">
+              <div class="form-group" style="background: rgba(96, 165, 250, 0.08); border: 1px solid rgba(96, 165, 250, 0.2); padding: 15px; border-radius: 10px;">
+                <label for="settings-rtp-normal" style="color: #60a5fa; font-weight: 700;">RTP GLOBAL (JOGADOR NORMAL) (%)</label>
+                <input type="number" id="settings-rtp-normal" class="form-control" value="70" style="border-color: rgba(96, 165, 250, 0.4); font-weight: 700; color: #60a5fa;">
+                <p style="font-size: 0.8rem; color: var(--text-dim); margin-top: 8px; margin-bottom: 0;">RTP padrão para jogadores comuns (ex: 70 para 70% de chances de blocos fáceis).</p>
+              </div>
+              <div class="form-group" style="background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.2); padding: 15px; border-radius: 10px;">
+                <label for="settings-rtp-influencer" style="color: var(--success); font-weight: 700;">RTP GLOBAL (INFLUENCER / AFILIADO) (%)</label>
+                <input type="number" id="settings-rtp-influencer" class="form-control" value="95" style="border-color: rgba(16, 185, 129, 0.4); font-weight: 700; color: var(--success);">
+                <p style="font-size: 0.8rem; color: var(--text-dim); margin-top: 8px; margin-bottom: 0;">RTP padrão para influenciadores, facilitando a gravação de vídeos de vitórias (ex: 95 para 95%).</p>
+              </div>
+            </div>
+
             <div class="form-group">
               <label for="settings-multiplier">Meta Multiplicadora (ex: 2.0 para 2x)</label>
               <input type="number" step="0.1" id="settings-multiplier" class="form-control" value="2.0">
@@ -531,6 +545,8 @@
           document.getElementById('settings-max-bet').value = val.maxBetCents ? val.maxBetCents / 100 : 100;
           document.getElementById('settings-presets').value = (val.entrada_valores || [3, 5, 10, 20, 50, 100]).join(', ');
           document.getElementById('settings-first-deposit-bonus').value = val.firstDepositBonusPercent !== undefined ? val.firstDepositBonusPercent : 100;
+          document.getElementById('settings-rtp-normal').value = val.rtp_normal !== undefined ? val.rtp_normal : 70;
+          document.getElementById('settings-rtp-influencer').value = val.rtp_influencer !== undefined ? val.rtp_influencer : 95;
         }
 
         // Get deposit settings
@@ -632,6 +648,12 @@
             <td>${p.referred_by || '-'}</td>
             <td>
               <div class="balance-editor">
+                <input type="number" id="inp-rtp-${p.phone}" value="${p.rtp !== undefined && p.rtp !== null ? p.rtp : ''}" placeholder="Global" style="width: 70px;">
+                <button class="btn-save-balance" style="background: var(--accent);" onclick="updateUserRtp('${p.phone}')">OK</button>
+              </div>
+            </td>
+            <td>
+              <div class="balance-editor">
                 <input type="number" id="inp-bal-${p.phone}" value="${(p.balance_cents / 100).toFixed(2)}" step="1">
                 <button class="btn-save-balance" onclick="updateUserBalance('${p.phone}')">Salvar</button>
               </div>
@@ -714,6 +736,36 @@
           loadDashboardData();
         } else {
           alert("Erro ao atualizar saldo.");
+        }
+      } catch (e) {
+        alert("Erro de conexão.");
+      }
+    };
+
+    window.updateUserRtp = async function(phone) {
+      const element = document.getElementById("inp-rtp-" + phone);
+      const val = element ? parseInt(element.value) : NaN;
+      
+      let rtpVal = null;
+      if (!isNaN(val)) {
+        if (val < 0 || val > 100) {
+          alert("O RTP deve ser entre 0% e 100%.");
+          return;
+        }
+        rtpVal = val;
+      }
+
+      try {
+        const res = await fetch(SB_URL + '/rest/v1/profiles?phone=eq.' + phone, {
+          method: 'PATCH',
+          headers: SB_HEADERS,
+          body: JSON.stringify({ rtp: rtpVal })
+        });
+        if (res.ok) {
+          alert("RTP do usuário atualizado com sucesso!");
+          loadDashboardData();
+        } else {
+          alert("Erro ao atualizar RTP do usuário. Certifique-se de que executou a query SQL no painel do Supabase para criar a coluna rtp.");
         }
       } catch (e) {
         alert("Erro de conexão.");
@@ -986,11 +1038,13 @@
       const ratePerLinePercent = parseFloat(document.getElementById('settings-rate').value);
       const minBet = parseFloat(document.getElementById('settings-min-bet').value);
       const maxBet = parseFloat(document.getElementById('settings-max-bet').value);
+      const rtpNormal = parseFloat(document.getElementById('settings-rtp-normal').value);
+      const rtpInfluencer = parseFloat(document.getElementById('settings-rtp-influencer').value);
       
       const presetsStr = document.getElementById('settings-presets').value;
       const presets = presetsStr.split(',').map(s => parseFloat(s.trim())).filter(n => !isNaN(n));
 
-      if (isNaN(firstDepositBonus) || isNaN(targetMultiplier) || isNaN(ratePerLinePercent) || isNaN(minBet) || isNaN(maxBet) || presets.length === 0) {
+      if (isNaN(firstDepositBonus) || isNaN(targetMultiplier) || isNaN(ratePerLinePercent) || isNaN(minBet) || isNaN(maxBet) || isNaN(rtpNormal) || isNaN(rtpInfluencer) || presets.length === 0) {
         alert("Preencha todos os campos corretamente.");
         return;
       }
@@ -1001,7 +1055,9 @@
         ratePerLine: ratePerLinePercent / 100,
         minBetCents: Math.round(minBet * 100),
         maxBetCents: Math.round(maxBet * 100),
-        entrada_valores: presets
+        entrada_valores: presets,
+        rtp_normal: rtpNormal,
+        rtp_influencer: rtpInfluencer
       };
 
       try {
