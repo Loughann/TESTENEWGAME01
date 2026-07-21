@@ -346,6 +346,41 @@
     return newBoard;
   }
 
+  async function approveDepositTransaction(tx) {
+    const txs = await dbGetTransactions(tx.phone);
+    const completedCount = txs.filter(t => t.type === 'DEPOSIT' && t.status === 'COMPLETED').length;
+    
+    let bonusCents = 0;
+    if (completedCount === 0) {
+      const config = await dbGetConfig('game_settings', { firstDepositBonusPercent: 100 });
+      const percent = Number(config.firstDepositBonusPercent) || 0;
+      if (percent > 0) {
+        bonusCents = Math.round(Number(tx.amount_cents) * (percent / 100));
+        
+        const bonusTxId = 'BN' + Math.random().toString(36).substring(2, 11).toUpperCase();
+        await dbCreateTransaction({
+          id: bonusTxId,
+          phone: tx.phone,
+          type: 'DEPOSIT',
+          status: 'COMPLETED',
+          amount_cents: bonusCents,
+          pix_key: 'BÔNUS_PRIMEIRO_DEPÓSITO',
+          txid: bonusTxId
+        });
+      }
+    }
+
+    await dbUpdateTransaction(tx.id, { status: 'COMPLETED' });
+    const profile = await dbGetProfile(tx.phone);
+    if (profile) {
+      const newBalance = Number(profile.balance_cents) + Number(tx.amount_cents) + bonusCents;
+      await dbUpdateProfile(tx.phone, { balance_cents: newBalance });
+      
+      trackEvent('Purchase', { value: tx.amount_cents / 100, currency: 'BRL' });
+      console.log(`[Supabase Mock API] Approved deposit ${tx.id}. Balance credited. (Bonus: R$ ${(bonusCents / 100).toFixed(2)})`);
+    }
+  }
+
   // Auto approve deposits in background (Supabase polling)
   setInterval(async () => {
     try {
@@ -354,45 +389,36 @@
       const pendingTxs = await res.json();
 
       for (const tx of pendingTxs) {
-        const elapsed = Date.now() - new Date(tx.created_at).getTime();
-        if (elapsed >= 5000) {
-          console.log(`[Supabase Mock API] Approving deposit ${tx.id}...`);
-          
-          // Verify if this is the user's first completed deposit
-          const txs = await dbGetTransactions(tx.phone);
-          const completedCount = txs.filter(t => t.type === 'DEPOSIT' && t.status === 'COMPLETED').length;
-          
-          let bonusCents = 0;
-          if (completedCount === 0) {
-            // Apply first deposit percentage bonus automatically
-            const config = await dbGetConfig('game_settings', { firstDepositBonusPercent: 100 });
-            const percent = Number(config.firstDepositBonusPercent) || 0;
-            if (percent > 0) {
-              bonusCents = Math.round(Number(tx.amount_cents) * (percent / 100));
-              
-              // Record bonus transaction history
-              const bonusTxId = 'BN' + Math.random().toString(36).substring(2, 11).toUpperCase();
-              await dbCreateTransaction({
-                id: bonusTxId,
-                phone: tx.phone,
-                type: 'DEPOSIT',
-                status: 'COMPLETED',
-                amount_cents: bonusCents,
-                pix_key: 'BÔNUS_PRIMEIRO_DEPÓSITO',
-                txid: bonusTxId
-              });
-            }
-          }
+        const pixKey = tx.pix_key || '';
+        const gatewayName = pixKey.startsWith('vizzionpay:') ? 'vizzionpay' : 'simulado';
 
-          await dbUpdateTransaction(tx.id, { status: 'COMPLETED' });
-          const profile = await dbGetProfile(tx.phone);
-          if (profile) {
-            const newBalance = Number(profile.balance_cents) + Number(tx.amount_cents) + bonusCents;
-            await dbUpdateProfile(tx.phone, { balance_cents: newBalance });
-            
-            // Trigger Meta/TikTok purchase event
-            trackEvent('Purchase', { value: tx.amount_cents / 100, currency: 'BRL' });
-            console.log(`[Supabase Mock API] Approved deposit. Balance credited. (Bonus: R$ ${(bonusCents / 100).toFixed(2)})`);
+        if (gatewayName === 'simulado') {
+          const elapsed = Date.now() - new Date(tx.created_at).getTime();
+          if (elapsed >= 5000) {
+            console.log(`[Supabase Mock API] Auto-approving simulated deposit ${tx.id}...`);
+            await approveDepositTransaction(tx);
+          }
+        } else if (gatewayName === 'vizzionpay') {
+          const gatewayTxId = pixKey.split(':')[1];
+          if (gatewayTxId) {
+            try {
+              const resGate = await dbGetConfig('gateway_settings');
+              const checkRes = await originalFetch(`/api/vizzionpay/gateway/transactions?id=${gatewayTxId}`, {
+                headers: {
+                  'x-public-key': resGate.clientId || 'loughanpk2001_j0np7mhexk9ws65u',
+                  'x-secret-key': resGate.clientSecret || '6700v7cpkqx7dgn474oi9bmh6mcqah5hikzms3tzzj5d5ij129pb2pqpyuo9wd2q'
+                }
+              });
+              if (checkRes.ok) {
+                const checkData = await checkRes.json();
+                if (checkData.status === 'PAID' || checkData.status === 'APPROVED' || checkData.payedAt) {
+                  console.log(`[Supabase Mock API] Vizzion Pay transaction ${gatewayTxId} is PAID! Approving...`);
+                  await approveDepositTransaction(tx);
+                }
+              }
+            } catch (e) {
+              console.error("[Vizzionpay API] Error polling status for transaction:", gatewayTxId, e);
+            }
           }
         }
       }
@@ -623,6 +649,7 @@
       const txid = 'TX' + Math.random().toString(36).substring(2, 11).toUpperCase();
       let pixCode = '';
       let qrcode = '';
+      let gatewayTxId = '';
 
       const resGate = await dbGetConfig('gateway_settings', { gatewayName: 'simulado' });
       if (resGate.gatewayName === 'vizzionpay') {
@@ -652,6 +679,7 @@
             if (vizzionData.pix && vizzionData.pix.code) {
               pixCode = vizzionData.pix.code;
               qrcode = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(pixCode)}`;
+              gatewayTxId = vizzionData.transactionId;
             } else {
               return new Response(JSON.stringify({ message: "A gateway Vizzion Pay não retornou os dados do Pix." }), { status: 400 });
             }
@@ -678,7 +706,8 @@
         amount_cents: amountCents,
         pix_code: pixCode,
         qrcode: qrcode,
-        txid: txid
+        txid: txid,
+        pix_key: resGate.gatewayName === 'vizzionpay' ? ('vizzionpay:' + gatewayTxId) : 'simulado'
       };
 
       try {
