@@ -506,19 +506,26 @@
         maxBetCents: 10000,
         entrada_valores: [3, 5, 10, 20, 50, 100]
       });
+      const depositSettings = await dbGetConfig('deposit_settings', {
+        values: [20, 30, 50, 100, 200],
+        labels: { "20": "MÍNIMO", "30": "QUENTE", "50": "+CHANCES", "100": "BÔNUS", "200": "BÔNUS" },
+        colors: { "20": "#f59e0b", "30": "#ef4444", "50": "#22c55e", "100": "#8b5cf6", "200": "#8b5cf6" }
+      });
       return new Response(JSON.stringify({
         entrada_valores: config.entrada_valores || [3, 5, 10, 20, 50, 100],
-        deposito_valores_rapidos: [20, 30, 50, 100, 200],
-        deposito_botoes_labels: { "20": "MÍNIMO", "30": "QUENTE", "50": "+CHANCES", "100": "BÔNUS", "200": "BÔNUS" },
-        deposito_botoes_cores: { "20": "#f59e0b", "30": "#ef4444", "50": "#22c55e", "100": "#8b5cf6", "200": "#8b5cf6" },
+        deposito_valores_rapidos: depositSettings.values,
+        deposito_botoes_labels: depositSettings.labels,
+        deposito_botoes_cores: depositSettings.colors,
         fin: { deposito_minimo: 20, deposito_maximo: 10000, saque_minimo: config.minBetCents ? Math.round(config.minBetCents / 100) : 30, saque_afiliado_minimo: 30 }
       }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
 
     // Route: Deposit info
     if (urlString === '/api/wallet/deposit-info' && method === 'GET') {
+      const config = await dbGetConfig('game_settings', { firstDepositBonusPercent: 100 });
+      const percent = config.firstDepositBonusPercent !== undefined ? Number(config.firstDepositBonusPercent) : 100;
       return new Response(JSON.stringify({
-        elegivel: true, bonus_minimo: 20, bonus_maximo: 500, bonus_percentual: 50
+        elegivel: true, bonus_minimo: 20, bonus_maximo: 500, bonus_percentual: percent
       }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
 

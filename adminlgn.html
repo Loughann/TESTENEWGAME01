@@ -405,6 +405,56 @@
               <input type="text" id="settings-presets" class="form-control" value="3, 5, 10, 20, 50, 100">
             </div>
 
+            <h3 style="margin-top: 30px; margin-bottom: 20px; font-weight: 600; color: #60a5fa;">Valores e Selos de Depósito</h3>
+            <p style="font-size: 0.85rem; color: var(--text-dim); margin-bottom: 20px;">Defina até 5 valores de depósito rápido com seus respectivos selos (labels) e cores hexadecimais.</p>
+            
+            <div class="grid-2" style="margin-bottom: 20px;">
+              <div>
+                <strong style="font-size: 0.9rem; color: var(--text-dim);">Botão 1</strong>
+                <div style="display: flex; gap: 10px; margin-top: 5px;">
+                  <input type="number" id="dep-val-1" class="form-control" placeholder="Valor (R$)">
+                  <input type="text" id="dep-label-1" class="form-control" placeholder="Selo (ex: MÍNIMO)">
+                  <input type="text" id="dep-color-1" class="form-control" placeholder="Cor (ex: #f59e0b)">
+                </div>
+              </div>
+              <div>
+                <strong style="font-size: 0.9rem; color: var(--text-dim);">Botão 2</strong>
+                <div style="display: flex; gap: 10px; margin-top: 5px;">
+                  <input type="number" id="dep-val-2" class="form-control" placeholder="Valor (R$)">
+                  <input type="text" id="dep-label-2" class="form-control" placeholder="Selo (ex: QUENTE)">
+                  <input type="text" id="dep-color-2" class="form-control" placeholder="Cor (ex: #ef4444)">
+                </div>
+              </div>
+            </div>
+
+            <div class="grid-2" style="margin-bottom: 20px;">
+              <div>
+                <strong style="font-size: 0.9rem; color: var(--text-dim);">Botão 3</strong>
+                <div style="display: flex; gap: 10px; margin-top: 5px;">
+                  <input type="number" id="dep-val-3" class="form-control" placeholder="Valor (R$)">
+                  <input type="text" id="dep-label-3" class="form-control" placeholder="Selo (ex: +CHANCES)">
+                  <input type="text" id="dep-color-3" class="form-control" placeholder="Cor (ex: #22c55e)">
+                </div>
+              </div>
+              <div>
+                <strong style="font-size: 0.9rem; color: var(--text-dim);">Botão 4</strong>
+                <div style="display: flex; gap: 10px; margin-top: 5px;">
+                  <input type="number" id="dep-val-4" class="form-control" placeholder="Valor (R$)">
+                  <input type="text" id="dep-label-4" class="form-control" placeholder="Selo (ex: BÔNUS)">
+                  <input type="text" id="dep-color-4" class="form-control" placeholder="Cor (ex: #8b5cf6)">
+                </div>
+              </div>
+            </div>
+
+            <div class="form-group" style="margin-bottom: 30px; max-width: 290px;">
+              <strong style="font-size: 0.9rem; color: var(--text-dim);">Botão 5</strong>
+              <div style="display: flex; gap: 10px; margin-top: 5px;">
+                <input type="number" id="dep-val-5" class="form-control" placeholder="Valor (R$)">
+                <input type="text" id="dep-label-5" class="form-control" placeholder="Selo (ex: RECOMENDADO)">
+                <input type="text" id="dep-color-5" class="form-control" placeholder="Cor (ex: #8b5cf6)">
+              </div>
+            </div>
+
             <button class="btn-save-settings" onclick="saveAdminSettings()">Salvar Configurações</button>
             <div id="settings-success" class="settings-success-msg">Configurações salvas com sucesso no Supabase!</div>
           </div>
@@ -481,6 +531,23 @@
           document.getElementById('settings-max-bet').value = val.maxBetCents ? val.maxBetCents / 100 : 100;
           document.getElementById('settings-presets').value = (val.entrada_valores || [3, 5, 10, 20, 50, 100]).join(', ');
           document.getElementById('settings-first-deposit-bonus').value = val.firstDepositBonusPercent !== undefined ? val.firstDepositBonusPercent : 100;
+        }
+
+        // Get deposit settings
+        const resDep = await fetch(SB_URL + '/rest/v1/config?key=eq.deposit_settings', { headers: SB_HEADERS });
+        const depData = await resDep.json();
+        const depVal = (depData[0] && depData[0].value) 
+          ? (typeof depData[0].value === 'string' ? JSON.parse(depData[0].value) : depData[0].value)
+          : {
+              values: [20, 30, 50, 100, 200],
+              labels: { "20": "MÍNIMO", "30": "QUENTE", "50": "+CHANCES", "100": "BÔNUS", "200": "BÔNUS" },
+              colors: { "20": "#f59e0b", "30": "#ef4444", "50": "#22c55e", "100": "#8b5cf6", "200": "#8b5cf6" }
+            };
+        for (let i = 1; i <= 5; i++) {
+          const val = depVal.values[i-1] !== undefined ? depVal.values[i-1] : '';
+          document.getElementById(`dep-val-${i}`).value = val;
+          document.getElementById(`dep-label-${i}`).value = val !== '' ? (depVal.labels[val.toString()] || '') : '';
+          document.getElementById(`dep-color-${i}`).value = val !== '' ? (depVal.colors[val.toString()] || '') : '';
         }
 
         // 5. Get ads settings
@@ -947,9 +1014,37 @@
           })
         });
         if (res.ok) {
-          const msg = document.getElementById('settings-success');
-          msg.style.display = 'block';
-          setTimeout(() => msg.style.display = 'none', 3000);
+          // Save deposit settings
+          const depValues = [];
+          const depLabels = {};
+          const depColors = {};
+          for (let i = 1; i <= 5; i++) {
+            const val = parseFloat(document.getElementById(`dep-val-${i}`).value);
+            const label = document.getElementById(`dep-label-${i}`).value.trim();
+            const color = document.getElementById(`dep-color-${i}`).value.trim();
+            if (!isNaN(val)) {
+              depValues.push(val);
+              depLabels[val.toString()] = label;
+              depColors[val.toString()] = color;
+            }
+          }
+
+          const resDepSave = await fetch(SB_URL + '/rest/v1/config?on_conflict=key', {
+            method: 'POST',
+            headers: { ...SB_HEADERS, 'Prefer': 'resolution=merge-duplicates' },
+            body: JSON.stringify({
+              key: 'deposit_settings',
+              value: { values: depValues, labels: depLabels, colors: depColors }
+            })
+          });
+
+          if (resDepSave.ok) {
+            const msg = document.getElementById('settings-success');
+            msg.style.display = 'block';
+            setTimeout(() => msg.style.display = 'none', 3000);
+          } else {
+            alert("Erro ao salvar botões de depósito.");
+          }
         } else {
           alert("Erro ao salvar regras no Supabase.");
         }
