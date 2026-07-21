@@ -169,7 +169,7 @@
     }
 
     if (!urlString.startsWith('/api/')) {
-      return originalFetch.apply(this, arguments);
+      return originalFetch.apply(window, arguments);
     }
 
     const method = (options.method || 'GET').toUpperCase();
