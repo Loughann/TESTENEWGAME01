@@ -566,7 +566,12 @@
         deposito_valores_rapidos: depositSettings.values,
         deposito_botoes_labels: depositSettings.labels,
         deposito_botoes_cores: depositSettings.colors,
-        fin: { deposito_minimo: 20, deposito_maximo: 10000, saque_minimo: config.minBetCents ? Math.round(config.minBetCents / 100) : 30, saque_afiliado_minimo: 30 }
+        fin: {
+          deposito_minimo: config.minDeposit !== undefined ? Number(config.minDeposit) : 20,
+          deposito_maximo: 10000,
+          saque_minimo: config.minWithdraw !== undefined ? Number(config.minWithdraw) : 30,
+          saque_afiliado_minimo: config.minWithdraw !== undefined ? Number(config.minWithdraw) : 30
+        }
       }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
 
@@ -607,13 +612,46 @@
     if (urlString === '/api/wallet/deposit' && method === 'POST') {
       if (!user) return new Response(JSON.stringify({ message: "Não autorizado" }), { status: 401 });
       const { amountCents } = body;
-      if (!amountCents || amountCents < 2000) {
-        return new Response(JSON.stringify({ message: "Valor mínimo de R$ 20,00" }), { status: 400 });
+      
+      const config = await dbGetConfig('game_settings', { minDeposit: 20 });
+      const minDepCents = config.minDeposit !== undefined ? Number(config.minDeposit) * 100 : 2000;
+      
+      if (!amountCents || amountCents < minDepCents) {
+        return new Response(JSON.stringify({ message: "Valor mínimo de R$ " + (minDepCents / 100).toFixed(2) }), { status: 400 });
       }
 
       const txid = 'TX' + Math.random().toString(36).substring(2, 11).toUpperCase();
-      const pixCode = `00020101021126580014br.gov.bcb.pix0136blockwin-simulated-keys-pix-keys0218BlockWin Game Play5204000053039865405${(amountCents / 100).toFixed(2)}5802BR5915BLOCKWIN JOGOS6009SAO PAULO62170513${txid}6304FC3C`;
-      const qrcode = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(pixCode)}`;
+      let pixCode = `00020101021126580014br.gov.bcb.pix0136blockwin-simulated-keys-pix-keys0218BlockWin Game Play5204000053039865405${(amountCents / 100).toFixed(2)}5802BR5915BLOCKWIN JOGOS6009SAO PAULO62170513${txid}6304FC3C`;
+      let qrcode = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(pixCode)}`;
+
+      const resGate = await dbGetConfig('gateway_settings', { gatewayName: 'simulado' });
+      if (resGate.gatewayName === 'vizzionpay') {
+        try {
+          const vizzionRes = await originalFetch('https://app.vizzionpay.com.br/api/v1/pix', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'client-id': resGate.clientId || 'loughanpk2001_j0np7mhexk9ws65u',
+              'client-secret': resGate.clientSecret || '6700v7cpkqx7dgn474oi9bmh6mcqah5hikzms3tzzj5d5ij129pb2pqpyuo9wd2q'
+            },
+            body: JSON.stringify({
+              amount: (amountCents / 100),
+              external_id: txid,
+              callback_url: window.location.origin + '/api/webhook/vizzionpay'
+            })
+          });
+          if (vizzionRes.ok) {
+            const vizzionData = await vizzionRes.json();
+            if (vizzionData.pix_code) pixCode = vizzionData.pix_code;
+            else if (vizzionData.pixCode) pixCode = vizzionData.pixCode;
+            
+            if (vizzionData.qrcode) qrcode = vizzionData.qrcode;
+            else if (vizzionData.qrCode) qrcode = vizzionData.qrCode;
+          }
+        } catch (e) {
+          console.warn("[Vizzionpay API] Calling Vizzionpay failed, falling back to simulated credentials.", e);
+        }
+      }
 
       const newTx = {
         id: txid,
@@ -643,8 +681,12 @@
     if (urlString === '/api/wallet/withdraw' && method === 'POST') {
       if (!user) return new Response(JSON.stringify({ message: "Não autorizado" }), { status: 401 });
       const { amountCents, pixKey, typePix } = body;
-      if (!amountCents || amountCents < 3000) {
-        return new Response(JSON.stringify({ message: "Saque mínimo de R$ 30,00" }), { status: 400 });
+      
+      const config = await dbGetConfig('game_settings', { minWithdraw: 30 });
+      const minWithCents = config.minWithdraw !== undefined ? Number(config.minWithdraw) * 100 : 3000;
+      
+      if (!amountCents || amountCents < minWithCents) {
+        return new Response(JSON.stringify({ message: "Saque mínimo de R$ " + (minWithCents / 100).toFixed(2) }), { status: 400 });
       }
 
       if (Number(user.balance_cents) < amountCents) {
@@ -677,8 +719,12 @@
     if (urlString === '/api/wallet/withdraw-affiliate' && method === 'POST') {
       if (!user) return new Response(JSON.stringify({ message: "Não autorizado" }), { status: 401 });
       const { amountCents, pixKey, typePix } = body;
-      if (!amountCents || amountCents < 3000) {
-        return new Response(JSON.stringify({ message: "Saque mínimo de R$ 30,00" }), { status: 400 });
+      
+      const config = await dbGetConfig('game_settings', { minWithdraw: 30 });
+      const minWithCents = config.minWithdraw !== undefined ? Number(config.minWithdraw) * 100 : 3000;
+      
+      if (!amountCents || amountCents < minWithCents) {
+        return new Response(JSON.stringify({ message: "Saque mínimo de R$ " + (minWithCents / 100).toFixed(2) }), { status: 400 });
       }
 
       if (Number(user.comissao_saldo_cents) < amountCents) {
