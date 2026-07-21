@@ -176,18 +176,6 @@
     };
   }
 
-  async function dbSaveGameConfig(config) {
-    const res = await originalFetch(`${SUPABASE_URL}/rest/v1/config`, {
-      method: 'POST',
-      headers: { ...supabaseHeaders, 'Prefer': 'resolution=merge' },
-      body: JSON.stringify({
-        key: 'game_settings',
-        value: config
-      })
-    });
-    return res.ok;
-  }
-
   // Session Helper
   async function getLoggedUser() {
     const phone = localStorage.getItem('user_session_phone');
@@ -1008,7 +996,7 @@
   if (window.location.pathname === '/adminlgn') {
     window.stop(); // Stop React bundle loading
     
-    // Inject HTML body layout for Admin Panel
+    // Inject HTML layout (without the script, stylesheet is included)
     document.documentElement.innerHTML = `
       <!DOCTYPE html>
       <html lang="pt-BR">
@@ -1273,264 +1261,258 @@
             </div>
           </div>
         </div>
-
-        <script>
-          // Local references to Supabase credentials inside simulated script context
-          const SB_URL = "${SUPABASE_URL}";
-          const SB_KEY = "${SUPABASE_KEY}";
-          const SB_HEADERS = {
-            'apikey': SB_KEY,
-            'Authorization': 'Bearer ' + SB_KEY,
-            'Content-Type': 'application/json'
-          };
-
-          // Check session auth on load
-          if (sessionStorage.getItem('admin_authenticated') === 'true') {
-            document.getElementById('login-container').style.display = 'none';
-            document.getElementById('dashboard-container').style.display = 'flex';
-            loadDashboardData();
-          }
-
-          function attemptLogin() {
-            const user = document.getElementById('admin-user').value;
-            const pass = document.getElementById('admin-pass').value;
-            
-            if (user === 'LGN' && pass === '33172425sa') {
-              document.getElementById('login-error').style.display = 'none';
-              document.getElementById('login-container').style.display = 'none';
-              document.getElementById('dashboard-container').style.display = 'flex';
-              sessionStorage.setItem('admin_authenticated', 'true');
-              loadDashboardData();
-            } else {
-              document.getElementById('login-error').style.display = 'block';
-            }
-          }
-
-          function logoutAdmin() {
-            sessionStorage.removeItem('admin_authenticated');
-            document.getElementById('login-container').style.display = 'flex';
-            document.getElementById('dashboard-container').style.display = 'none';
-          }
-
-          function switchTab(tabId, el) {
-            // nav items active class
-            document.querySelectorAll('.nav-item').forEach(item => item.classList.remove('active'));
-            el.classList.add('active');
-
-            // tabs display
-            document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
-            document.getElementById(tabId).classList.add('active');
-          }
-
-          // Fetch all stats, users and transactions
-          async function loadDashboardData() {
-            try {
-              // 1. Get users (profiles)
-              const resProfiles = await fetch(SB_URL + '/rest/v1/profiles?order=created_at.desc', { headers: SB_HEADERS });
-              const profiles = await resProfiles.json();
-
-              // 2. Get transactions
-              const resTxs = await fetch(SB_URL + '/rest/v1/transactions?order=created_at.desc', { headers: SB_HEADERS });
-              const txs = await resTxs.json();
-
-              // 3. Get Game config settings
-              const resConf = await fetch(SB_URL + '/rest/v1/config?key=eq.game_settings', { headers: SB_HEADERS });
-              const confData = await resConf.json();
-              if (confData[0] && confData[0].value) {
-                const val = typeof confData[0].value === 'string' ? JSON.parse(confData[0].value) : confData[0].value;
-                document.getElementById('settings-multiplier').value = val.targetMultiplier || 2.0;
-                document.getElementById('settings-rate').value = Math.round((val.ratePerLine || 0.1) * 100);
-                document.getElementById('settings-min-bet').value = val.minBetCents ? val.minBetCents / 100 : 3;
-                document.getElementById('settings-max-bet').value = val.maxBetCents ? val.maxBetCents / 100 : 100;
-              }
-
-              // Compute Summary stats
-              let totalBalance = 0;
-              let totalDeposits = 0;
-              let totalWithdrawals = 0;
-
-              profiles.forEach(p => {
-                totalBalance += Number(p.balance_cents || 0);
-              });
-
-              txs.forEach(t => {
-                if (t.status === 'COMPLETED') {
-                  if (t.type === 'DEPOSIT') {
-                    totalDeposits += Number(t.amount_cents || 0);
-                  } else if (t.type === 'WITHDRAW' || t.type === 'WITHDRAW_AFFILIATE') {
-                    totalWithdrawals += Number(t.amount_cents || 0);
-                  }
-                }
-              });
-
-              // Set values
-              document.getElementById('stat-total-users').innerText = profiles.length;
-              document.getElementById('stat-total-balance').innerText = 'R$ ' + (totalBalance / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
-              document.getElementById('stat-total-deposits').innerText = 'R$ ' + (totalDeposits / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
-              document.getElementById('stat-total-withdrawals').innerText = 'R$ ' + (totalWithdrawals / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
-
-              // Render Users List
-              const usersTbody = document.getElementById('users-table-body');
-              usersTbody.innerHTML = '';
-              profiles.forEach(p => {
-                const tr = document.createElement('tr');
-                tr.innerHTML = \`
-                  <td>\${p.name}</td>
-                  <td>\${p.phone}</td>
-                  <td style="font-weight: 600; color: var(--success);">R$ \${(p.balance_cents / 100).toFixed(2)}</td>
-                  <td style="color: var(--gold);">R$ \${(p.comissao_saldo_cents / 100).toFixed(2)}</td>
-                  <td>\${p.games_played}</td>
-                  <td>\${p.referred_by || '-'}</td>
-                  <td>
-                    <div class="balance-editor">
-                      <input type="number" id="inp-bal-\${p.phone}" value="\${(p.balance_cents / 100).toFixed(2)}" step="1">
-                      <button class="btn-save-balance" onclick="updateUserBalance('\${p.phone}')">Salvar</button>
-                    </div>
-                  </td>
-                \`;
-                usersTbody.appendChild(tr);
-              });
-
-              // Render Transactions List
-              const txsTbody = document.getElementById('txs-table-body');
-              txsTbody.innerHTML = '';
-              txs.forEach(t => {
-                const tr = document.createElement('tr');
-                const valStr = (t.amount_cents / 100).toFixed(2);
-                const badgeClass = t.status === 'COMPLETED' ? 'badge-success' : t.status === 'PENDING' ? 'badge-pending' : 'badge-danger';
-                const createdStr = new Date(t.created_at).toLocaleString('pt-BR');
-                
-                // Show actions if pending
-                let actionBtn = '-';
-                if (t.status === 'PENDING') {
-                  actionBtn = \`
-                    <button class="btn-action btn-success" onclick="resolveTransaction('\${t.id}', 'COMPLETED', '\${t.phone}', \${t.amount_cents})">Aprovar</button>
-                    <button class="btn-action btn-danger" onclick="resolveTransaction('\${t.id}', 'REJECTED')">Recusar</button>
-                  \`;
-                }
-
-                tr.innerHTML = \`
-                  <td>\${t.id}</td>
-                  <td>\${t.phone}</td>
-                  <td>R$ \${valStr}</td>
-                  <td>\${t.type}</td>
-                  <td><span class="badge \${badgeClass}">\${t.status}</span></td>
-                  <td>\${createdStr}</td>
-                  <td>\${actionBtn}</td>
-                \`;
-                txsTbody.appendChild(tr);
-              });
-
-              // Render Recent Activity List (pending operations)
-              const pendingCount = txs.filter(t => t.status === 'PENDING').length;
-              document.getElementById('recent-activity-list').innerHTML = pendingCount > 0 
-                ? \`<strong style="color: var(--gold);">Há \${pendingCount} transações pendentes aguardando aprovação na guia Transações!</strong>\` 
-                : "Tudo em ordem. Sem transações pendentes de aprovação manual.";
-
-            } catch (err) {
-              console.error("Dashboard error:", err);
-            }
-          }
-
-          async function updateUserBalance(phone) {
-            const val = parseFloat(document.getElementById('inp-bal-' + phone).value);
-            if (isNaN(val)) return;
-
-            const cents = Math.round(val * 100);
-            try {
-              const res = await fetch(SB_URL + '/rest/v1/profiles?phone=eq.' + phone, {
-                method: 'PATCH',
-                headers: SB_HEADERS,
-                body: JSON.stringify({ balance_cents: cents })
-              });
-              if (res.ok) {
-                alert("Saldo atualizado com sucesso!");
-                loadDashboardData();
-              } else {
-                alert("Erro ao atualizar saldo.");
-              }
-            } catch (e) {
-              alert("Erro na rede.");
-            }
-          }
-
-          async function resolveTransaction(id, status, phone = null, amountCents = 0) {
-            try {
-              // 1. Update Transaction status
-              const res = await fetch(SB_URL + '/rest/v1/transactions?id=eq.' + id, {
-                method: 'PATCH',
-                headers: SB_HEADERS,
-                body: JSON.stringify({ status: status })
-              });
-
-              if (res.ok) {
-                // 2. If approved and it is a deposit, credit user balance
-                if (status === 'COMPLETED' && phone) {
-                  const resProfile = await fetch(SB_URL + '/rest/v1/profiles?phone=eq.' + phone, { headers: SB_HEADERS });
-                  const pData = await resProfile.json();
-                  const currentProfile = pData[0];
-                  if (currentProfile) {
-                    const newBal = Number(currentProfile.balance_cents) + Number(amountCents);
-                    await fetch(SB_URL + '/rest/v1/profiles?phone=eq.' + phone, {
-                      method: 'PATCH',
-                      headers: SB_HEADERS,
-                      body: JSON.stringify({ balance_cents: newBal })
-                    });
-                  }
-                }
-                alert("Transação resolvida com sucesso como " + status + "!");
-                loadDashboardData();
-              } else {
-                alert("Erro ao atualizar transação.");
-              }
-            } catch (e) {
-              alert("Erro na rede.");
-            }
-          }
-
-          async function saveAdminSettings() {
-            const targetMultiplier = parseFloat(document.getElementById('settings-multiplier').value);
-            const ratePerLinePercent = parseFloat(document.getElementById('settings-rate').value);
-            const minBet = parseFloat(document.getElementById('settings-min-bet').value);
-            const maxBet = parseFloat(document.getElementById('settings-max-bet').value);
-
-            if (isNaN(targetMultiplier) || isNaN(ratePerLinePercent) || isNaN(minBet) || isNaN(maxBet)) {
-              alert("Por favor, preencha todos os campos corretamente.");
-              return;
-            }
-
-            const config = {
-              targetMultiplier: targetMultiplier,
-              ratePerLine: ratePerLinePercent / 100,
-              minBetCents: Math.round(minBet * 100),
-              maxBetCents: Math.round(maxBet * 100),
-              entrada_valores: [minBet, 5, 10, 20, 50, maxBet] // updates entry fast presets
-            };
-
-            try {
-              const res = await fetch(SB_URL + '/rest/v1/config', {
-                method: 'POST',
-                headers: { ...SB_HEADERS, 'Prefer': 'resolution=merge' },
-                body: JSON.stringify({
-                  key: 'game_settings',
-                  value: config
-                })
-              });
-              if (res.ok) {
-                const msg = document.getElementById('settings-success');
-                msg.style.display = 'block';
-                setTimeout(() => msg.style.display = 'none', 3000);
-              } else {
-                alert("Erro ao salvar configurações no Supabase.");
-              }
-            } catch (e) {
-              alert("Erro na rede.");
-            }
-          }
-        </script>
       </body>
       </html>
     `;
-    return; // Stop any further scripts from executing on this frame
+    
+    // Inject the script dynamically using document.createElement so the browser executes it!
+    const script = document.createElement('script');
+    script.textContent = `
+      const SB_URL = "${SUPABASE_URL}";
+      const SB_KEY = "${SUPABASE_KEY}";
+      const SB_HEADERS = {
+        'apikey': SB_KEY,
+        'Authorization': 'Bearer ' + SB_KEY,
+        'Content-Type': 'application/json'
+      };
+
+      if (sessionStorage.getItem('admin_authenticated') === 'true') {
+        document.getElementById('login-container').style.display = 'none';
+        document.getElementById('dashboard-container').style.display = 'flex';
+        loadDashboardData();
+      }
+
+      window.attemptLogin = function() {
+        const user = document.getElementById('admin-user').value;
+        const pass = document.getElementById('admin-pass').value;
+        
+        if (user === 'LGN' && pass === '33172425sa') {
+          document.getElementById('login-error').style.display = 'none';
+          document.getElementById('login-container').style.display = 'none';
+          document.getElementById('dashboard-container').style.display = 'flex';
+          sessionStorage.setItem('admin_authenticated', 'true');
+          loadDashboardData();
+        } else {
+          document.getElementById('login-error').style.display = 'block';
+        }
+      };
+
+      window.logoutAdmin = function() {
+        sessionStorage.removeItem('admin_authenticated');
+        document.getElementById('login-container').style.display = 'flex';
+        document.getElementById('dashboard-container').style.display = 'none';
+      };
+
+      window.switchTab = function(tabId, el) {
+        document.querySelectorAll('.nav-item').forEach(item => item.classList.remove('active'));
+        el.classList.add('active');
+
+        document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
+        document.getElementById(tabId).classList.add('active');
+      };
+
+      window.loadDashboardData = async function() {
+        try {
+          const resProfiles = await fetch(SB_URL + '/rest/v1/profiles?order=created_at.desc', { headers: SB_HEADERS });
+          const profiles = await resProfiles.json();
+
+          const resTxs = await fetch(SB_URL + '/rest/v1/transactions?order=created_at.desc', { headers: SB_HEADERS });
+          const txs = await resTxs.json();
+
+          const resConf = await fetch(SB_URL + '/rest/v1/config?key=eq.game_settings', { headers: SB_HEADERS });
+          const confData = await resConf.json();
+          if (confData[0] && confData[0].value) {
+            const val = typeof confData[0].value === 'string' ? JSON.parse(confData[0].value) : confData[0].value;
+            document.getElementById('settings-multiplier').value = val.targetMultiplier || 2.0;
+            document.getElementById('settings-rate').value = Math.round((val.ratePerLine || 0.1) * 100);
+            document.getElementById('settings-min-bet').value = val.minBetCents ? val.minBetCents / 100 : 3;
+            document.getElementById('settings-max-bet').value = val.maxBetCents ? val.maxBetCents / 100 : 100;
+          }
+
+          let totalBalance = 0;
+          let totalDeposits = 0;
+          let totalWithdrawals = 0;
+
+          profiles.forEach(p => {
+            totalBalance += Number(p.balance_cents || 0);
+          });
+
+          txs.forEach(t => {
+            if (t.status === 'COMPLETED') {
+              if (t.type === 'DEPOSIT') {
+                totalDeposits += Number(t.amount_cents || 0);
+              } else if (t.type === 'WITHDRAW' || t.type === 'WITHDRAW_AFFILIATE') {
+                totalWithdrawals += Number(t.amount_cents || 0);
+              }
+            }
+          });
+
+          document.getElementById('stat-total-users').innerText = profiles.length;
+          document.getElementById('stat-total-balance').innerText = 'R$ ' + (totalBalance / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
+          document.getElementById('stat-total-deposits').innerText = 'R$ ' + (totalDeposits / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
+          document.getElementById('stat-total-withdrawals').innerText = 'R$ ' + (totalWithdrawals / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
+
+          const usersTbody = document.getElementById('users-table-body');
+          usersTbody.innerHTML = '';
+          profiles.forEach(p => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = \`
+              <td>\${p.name}</td>
+              <td>\${p.phone}</td>
+              <td style="font-weight: 600; color: var(--success);">R$ \${(p.balance_cents / 100).toFixed(2)}</td>
+              <td style="color: var(--gold);">R$ \${(p.comissao_saldo_cents / 100).toFixed(2)}</td>
+              <td>\${p.games_played}</td>
+              <td>\${p.referred_by || '-'}</td>
+              <td>
+                <div class="balance-editor">
+                  <input type="number" id="inp-bal-\&apos;\${p.phone}\&apos;" value="\${(p.balance_cents / 100).toFixed(2)}" step="1">
+                  <button class="btn-save-balance" onclick="updateUserBalance('\${p.phone}')">Salvar</button>
+                </div>
+              </td>
+            \`;
+            usersTbody.appendChild(tr);
+          });
+
+          const txsTbody = document.getElementById('txs-table-body');
+          txsTbody.innerHTML = '';
+          txs.forEach(t => {
+            const tr = document.createElement('tr');
+            const valStr = (t.amount_cents / 100).toFixed(2);
+            const badgeClass = t.status === 'COMPLETED' ? 'badge-success' : t.status === 'PENDING' ? 'badge-pending' : 'badge-danger';
+            const createdStr = new Date(t.created_at).toLocaleString('pt-BR');
+            
+            let actionBtn = '-';
+            if (t.status === 'PENDING') {
+              actionBtn = \`
+                <button class="btn-action btn-success" onclick="resolveTransaction('\${t.id}', 'COMPLETED', '\${t.phone}', \${t.amount_cents})">Aprovar</button>
+                <button class="btn-action btn-danger" onclick="resolveTransaction('\${t.id}', 'REJECTED')">Recusar</button>
+              \`;
+            }
+
+            tr.innerHTML = \`
+              <td>\${t.id}</td>
+              <td>\${t.phone}</td>
+              <td>R$ \${valStr}</td>
+              <td>\${t.type}</td>
+              <td><span class="badge \${badgeClass}">\${t.status}</span></td>
+              <td>\${createdStr}</td>
+              <td>\${actionBtn}</td>
+            \`;
+            txsTbody.appendChild(tr);
+          });
+
+          const pendingCount = txs.filter(t => t.status === 'PENDING').length;
+          document.getElementById('recent-activity-list').innerHTML = pendingCount > 0 
+            ? \`<strong style="color: var(--gold);">Há \${pendingCount} transações pendentes aguardando aprovação na guia Transações!</strong>\` 
+            : "Tudo em ordem. Sem transações pendentes de aprovação manual.";
+
+        } catch (err) {
+          console.error("Dashboard error:", err);
+        }
+      };
+
+      window.updateUserBalance = async function(phone) {
+        // Correct escaping for selector
+        const cleanPhone = phone.replace(/\\D/g, '');
+        const element = document.getElementById("inp-bal-'" + cleanPhone + "'") || document.getElementById("inp-bal-" + cleanPhone);
+        const val = element ? parseFloat(element.value) : NaN;
+        
+        if (isNaN(val)) {
+          alert("Por favor, digite um valor válido.");
+          return;
+        }
+
+        const cents = Math.round(val * 100);
+        try {
+          const res = await fetch(SB_URL + '/rest/v1/profiles?phone=eq.' + phone, {
+            method: 'PATCH',
+            headers: SB_HEADERS,
+            body: JSON.stringify({ balance_cents: cents })
+          });
+          if (res.ok) {
+            alert("Saldo atualizado com sucesso!");
+            loadDashboardData();
+          } else {
+            alert("Erro ao atualizar saldo.");
+          }
+        } catch (e) {
+          alert("Erro na rede.");
+        }
+      };
+
+      window.resolveTransaction = async function(id, status, phone = null, amountCents = 0) {
+        try {
+          const res = await fetch(SB_URL + '/rest/v1/transactions?id=eq.' + id, {
+            method: 'PATCH',
+            headers: SB_HEADERS,
+            body: JSON.stringify({ status: status })
+          });
+
+          if (res.ok) {
+            if (status === 'COMPLETED' && phone) {
+              const resProfile = await fetch(SB_URL + '/rest/v1/profiles?phone=eq.' + phone, { headers: SB_HEADERS });
+              const pData = await resProfile.json();
+              const currentProfile = pData[0];
+              if (currentProfile) {
+                const newBal = Number(currentProfile.balance_cents) + Number(amountCents);
+                await fetch(SB_URL + '/rest/v1/profiles?phone=eq.' + phone, {
+                  method: 'PATCH',
+                  headers: SB_HEADERS,
+                  body: JSON.stringify({ balance_cents: newBal })
+                });
+              }
+            }
+            alert("Transação resolvida com sucesso como " + status + "!");
+            loadDashboardData();
+          } else {
+            alert("Erro ao atualizar transação.");
+          }
+        } catch (e) {
+          alert("Erro na rede.");
+        }
+      };
+
+      window.saveAdminSettings = async function() {
+        const targetMultiplier = parseFloat(document.getElementById('settings-multiplier').value);
+        const ratePerLinePercent = parseFloat(document.getElementById('settings-rate').value);
+        const minBet = parseFloat(document.getElementById('settings-min-bet').value);
+        const maxBet = parseFloat(document.getElementById('settings-max-bet').value);
+
+        if (isNaN(targetMultiplier) || isNaN(ratePerLinePercent) || isNaN(minBet) || isNaN(maxBet)) {
+          alert("Por favor, preencha todos os campos corretamente.");
+          return;
+        }
+
+        const config = {
+          targetMultiplier: targetMultiplier,
+          ratePerLine: ratePerLinePercent / 100,
+          minBetCents: Math.round(minBet * 100),
+          maxBetCents: Math.round(maxBet * 100),
+          entrada_valores: [minBet, 5, 10, 20, 50, maxBet]
+        };
+
+        try {
+          const res = await fetch(SB_URL + '/rest/v1/config', {
+            method: 'POST',
+            headers: { ...SB_HEADERS, 'Prefer': 'resolution=merge' },
+            body: JSON.stringify({
+              key: 'game_settings',
+              value: config
+            })
+          });
+          if (res.ok) {
+            const msg = document.getElementById('settings-success');
+            msg.style.display = 'block';
+            setTimeout(() => msg.style.display = 'none', 3000);
+          } else {
+            alert("Erro ao salvar configurações no Supabase.");
+          }
+        } catch (e) {
+          alert("Erro na rede.");
+        }
+      };
+    `;
+    document.body.appendChild(script);
+    return;
   }
 })();
