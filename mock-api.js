@@ -307,15 +307,32 @@
         const elapsed = now - new Date(tx.created_at).getTime();
         if (elapsed >= 5000) {
           console.log(`[Supabase Mock API] Approving deposit ${tx.id}...`);
+          
+          // Check for active first deposit percentage coupon
+          const txs = await dbGetTransactions(tx.phone);
+          const pendingCoupon = txs.find(t => t.type === 'DEPOSIT' && t.status === 'PENDING_COUPON');
+          let bonusCents = 0;
+          if (pendingCoupon && pendingCoupon.pix_key) {
+            const parts = pendingCoupon.pix_key.split(':');
+            const percent = Number(parts[2]) || 0;
+            bonusCents = Math.round(Number(tx.amount_cents) * (percent / 100));
+            
+            // Mark coupon transaction as completed and store the bonus amount
+            await dbUpdateTransaction(pendingCoupon.id, { 
+              status: 'COMPLETED', 
+              amount_cents: bonusCents 
+            });
+          }
+
           await dbUpdateTransaction(tx.id, { status: 'COMPLETED' });
           const profile = await dbGetProfile(tx.phone);
           if (profile) {
-            const newBalance = Number(profile.balance_cents) + Number(tx.amount_cents);
+            const newBalance = Number(profile.balance_cents) + Number(tx.amount_cents) + bonusCents;
             await dbUpdateProfile(tx.phone, { balance_cents: newBalance });
             
-            // Trigger meta ads deposit tracking event (Purchase)
+            // Trigger Meta/TikTok purchase event
             trackEvent('Purchase', { value: tx.amount_cents / 100, currency: 'BRL' });
-            console.log(`[Supabase Mock API] Credited R$ ${(tx.amount_cents / 100).toFixed(2)} to ${tx.phone}`);
+            console.log(`[Supabase Mock API] Credited R$ ${(tx.amount_cents / 100).toFixed(2)} to ${tx.phone} (Bonus: R$ ${(bonusCents / 100).toFixed(2)})`);
           }
         }
       }
@@ -555,7 +572,7 @@
       }
     }
 
-    // Route: Withdraw balance
+    // Route: Withdraw balance (MANUAL APPROVAL)
     if (urlString === '/api/wallet/withdraw' && method === 'POST') {
       if (!user) return new Response(JSON.stringify({ message: "Não autorizado" }), { status: 401 });
       const { amountCents, pixKey, typePix } = body;
@@ -568,15 +585,17 @@
       }
 
       try {
+        // Deduct balance immediately
         const newBalance = Number(user.balance_cents) - amountCents;
         await dbUpdateProfile(user.phone, { balance_cents: newBalance });
 
+        // Record withdrawal as PENDING
         const txid = 'TX' + Math.random().toString(36).substring(2, 11).toUpperCase();
         await dbCreateTransaction({
           id: txid,
           phone: user.phone,
           type: 'WITHDRAW',
-          status: 'COMPLETED',
+          status: 'PENDING',
           amount_cents: amountCents,
           pix_key: pixKey,
           type_pix: typePix,
@@ -589,7 +608,7 @@
       }
     }
 
-    // Route: Withdraw affiliate commission
+    // Route: Withdraw affiliate commission (MANUAL APPROVAL)
     if (urlString === '/api/wallet/withdraw-affiliate' && method === 'POST') {
       if (!user) return new Response(JSON.stringify({ message: "Não autorizado" }), { status: 401 });
       const { amountCents, pixKey, typePix } = body;
@@ -602,15 +621,17 @@
       }
 
       try {
+        // Deduct commission immediately
         const newCommBalance = Number(user.comissao_saldo_cents) - amountCents;
         await dbUpdateProfile(user.phone, { comissao_saldo_cents: newCommBalance });
 
+        // Record withdrawal as PENDING
         const txid = 'TX' + Math.random().toString(36).substring(2, 11).toUpperCase();
         await dbCreateTransaction({
           id: txid,
           phone: user.phone,
           type: 'WITHDRAW_AFFILIATE',
-          status: 'COMPLETED',
+          status: 'PENDING',
           amount_cents: amountCents,
           pix_key: pixKey,
           type_pix: typePix,
@@ -623,17 +644,16 @@
       }
     }
 
-    // Route: Coupon redeem
+    // Route: Coupon redeem (Dynamic + support PERCENT 1st deposit)
     if (urlString === '/api/cupons/resgatar' && method === 'POST') {
       if (!user) return new Response(JSON.stringify({ message: "Não autorizado" }), { status: 401 });
       const { codigo } = body;
       const codeUpper = (codigo || '').trim().toUpperCase();
 
       try {
-        // Fetch active coupons from config
         const activeCoupons = await dbGetConfig('coupons', [
-          { code: 'BLOCK10', amountCents: 1000 },
-          { code: 'GANHE20', amountCents: 2000 }
+          { code: 'BLOCK10', amountCents: 1000, type: 'FIXED' },
+          { code: 'GANHE20', amountCents: 2000, type: 'FIXED' }
         ]);
 
         const matchedCoupon = activeCoupons.find(c => c.code.trim().toUpperCase() === codeUpper);
@@ -642,31 +662,64 @@
         }
 
         const txs = await dbGetTransactions(user.phone);
-        const alreadyRedeemed = txs.some(t => t.type === 'DEPOSIT' && t.pix_key === `CUPOM:${codeUpper}`);
+        const alreadyRedeemed = txs.some(t => t.type === 'DEPOSIT' && t.pix_key && t.pix_key.startsWith(`CUPOM:${codeUpper}`));
         if (alreadyRedeemed) {
           return new Response(JSON.stringify({ message: "Cupom já resgatado por você." }), { status: 400 });
         }
 
-        const rewardCents = matchedCoupon.amountCents;
-        const newBalance = Number(user.balance_cents) + rewardCents;
-        
-        await dbUpdateProfile(user.phone, { balance_cents: newBalance });
+        const couponType = matchedCoupon.type || 'FIXED';
 
-        const txid = 'TX' + Math.random().toString(36).substring(2, 11).toUpperCase();
-        await dbCreateTransaction({
-          id: txid,
-          phone: user.phone,
-          type: 'DEPOSIT',
-          status: 'COMPLETED',
-          amount_cents: rewardCents,
-          pix_key: `CUPOM:${codeUpper}`,
-          txid
-        });
+        if (couponType === 'PERCENT') {
+          // Verify if it is first deposit
+          const hasCompletedDeposits = txs.some(t => t.type === 'DEPOSIT' && t.status === 'COMPLETED');
+          if (hasCompletedDeposits) {
+            return new Response(JSON.stringify({ message: "Este cupom é exclusivo para o primeiro depósito e você já realizou depósitos." }), { status: 400 });
+          }
 
-        return new Response(JSON.stringify({
-          balanceCents: newBalance,
-          transaction: { status: 'COMPLETED' }
-        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+          const hasPendingCoupon = txs.some(t => t.type === 'DEPOSIT' && t.status === 'PENDING_COUPON');
+          if (hasPendingCoupon) {
+            return new Response(JSON.stringify({ message: "Você já tem um cupom de primeiro depósito ativado." }), { status: 400 });
+          }
+
+          // Register active percentage coupon state in transactions table
+          const txid = 'CP' + Math.random().toString(36).substring(2, 11).toUpperCase();
+          const percentVal = matchedCoupon.percent || 100;
+          await dbCreateTransaction({
+            id: txid,
+            phone: user.phone,
+            type: 'DEPOSIT',
+            status: 'PENDING_COUPON',
+            amount_cents: 0,
+            pix_key: `CUPOM:${codeUpper}:${percentVal}`
+          });
+
+          return new Response(JSON.stringify({
+            message: `Cupom ativado! Seu primeiro depósito receberá +${percentVal}% de bônus!`,
+            couponActivated: true
+          }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+        } else {
+          // Standard FIXED coupon logic
+          const rewardCents = matchedCoupon.amountCents || 1000;
+          const newBalance = Number(user.balance_cents) + rewardCents;
+          
+          await dbUpdateProfile(user.phone, { balance_cents: newBalance });
+
+          const txid = 'TX' + Math.random().toString(36).substring(2, 11).toUpperCase();
+          await dbCreateTransaction({
+            id: txid,
+            phone: user.phone,
+            type: 'DEPOSIT',
+            status: 'COMPLETED',
+            amount_cents: rewardCents,
+            pix_key: `CUPOM:${codeUpper}`,
+            txid
+          });
+
+          return new Response(JSON.stringify({
+            balanceCents: newBalance,
+            transaction: { status: 'COMPLETED' }
+          }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+        }
       } catch (err) {
         return handleSchemaError(err);
       }
@@ -1363,11 +1416,18 @@
                     <h3>Criar Novo Cupom</h3>
                     <div class="form-group">
                       <label for="coupon-code">Código do Cupom</label>
-                      <input type="text" id="coupon-code" class="form-control" placeholder="Ex: BLOCK50">
+                      <input type="text" id="coupon-code" class="form-control" placeholder="Ex: FIRST50">
                     </div>
                     <div class="form-group">
-                      <label for="coupon-amount">Valor de Recompensa (R$)</label>
-                      <input type="number" id="coupon-amount" class="form-control" placeholder="Ex: 50">
+                      <label for="coupon-type">Tipo de Bônus</label>
+                      <select id="coupon-type" class="form-control" style="background: rgba(15,23,42,0.8); border: 1px solid var(--border); color: #fff;">
+                        <option value="FIXED">Bônus de Valor Fixo (R$)</option>
+                        <option value="PERCENT">Primeiro Depósito (%)</option>
+                      </select>
+                    </div>
+                    <div class="form-group">
+                      <label for="coupon-amount">Valor (R$ ou % de bônus)</label>
+                      <input type="number" id="coupon-amount" class="form-control" placeholder="Ex: 50 para R$ 50 ou 50% bônus">
                     </div>
                     <button class="btn-save-custom" onclick="createCoupon()">Adicionar Cupom</button>
                     <span id="coupon-success-msg" class="status-success-inline"></span>
@@ -1575,14 +1635,14 @@
           const coupsData = await resCoups.json();
           const coupons = (coupsData[0] && coupsData[0].value) 
             ? (typeof coupsData[0].value === 'string' ? JSON.parse(coupsData[0].value) : coupsData[0].value)
-            : [{ code: 'BLOCK10', amountCents: 1000 }, { code: 'GANHE20', amountCents: 2000 }];
+            : [{ code: 'BLOCK10', amountCents: 1000, type: 'FIXED' }, { code: 'GANHE20', amountCents: 2000, type: 'FIXED' }];
           renderCoupons(coupons);
 
           // Calculate statistics
           let totalBalance = 0;
           let totalDeposits = 0;
           let totalWithdrawals = 0;
-          let ftdUsers = new Set(); // First time depositors
+          let ftdUsers = new Set();
 
           profiles.forEach(p => {
             totalBalance += Number(p.balance_cents || 0);
@@ -1603,27 +1663,23 @@
           const conversion = profiles.length > 0 ? (ftdUsers.size / profiles.length) * 100 : 0;
           const retention = totalDeposits > 0 ? (ggr / totalDeposits) * 100 : 0;
 
-          // Game average bet
           let totalBetsCents = 0;
           games.forEach(g => {
             totalBetsCents += Number(g.bet_cents || 0);
           });
           const avgBet = games.length > 0 ? totalBetsCents / games.length : 0;
 
-          // Render overview stats
           document.getElementById('stat-total-users').innerText = profiles.length;
           document.getElementById('stat-total-balance').innerText = 'R$ ' + (totalBalance / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
           document.getElementById('stat-total-deposits').innerText = 'R$ ' + (totalDeposits / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
           document.getElementById('stat-total-withdrawals').innerText = 'R$ ' + (totalWithdrawals / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
 
-          // Render Retention / Business stats
           document.getElementById('stat-ggr').innerText = (ggr >= 0 ? '' : '-') + 'R$ ' + (Math.abs(ggr) / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
           document.getElementById('stat-ggr').style.color = ggr >= 0 ? 'var(--success)' : 'var(--danger)';
           document.getElementById('stat-retention').innerText = retention.toFixed(2) + '%';
           document.getElementById('stat-avg-bet').innerText = 'R$ ' + (avgBet / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
           document.getElementById('stat-conversion').innerText = conversion.toFixed(2) + '%';
 
-          // Render Users List
           const usersTbody = document.getElementById('users-table-body');
           usersTbody.innerHTML = '';
           profiles.forEach(p => {
@@ -1645,11 +1701,8 @@
             usersTbody.appendChild(tr);
           });
 
-          // Render Influencers List (filtered by referral count > 0 or commission balance > 0)
           const influencersTbody = document.getElementById('influencers-table-body');
           influencersTbody.innerHTML = '';
-          
-          // Profiles who invited someone or generated commission
           const influencers = profiles.filter(p => Number(p.indicados_count) > 0 || Number(p.total_commission_cents) > 0);
           influencers.forEach(inf => {
             const tr = document.createElement('tr');
@@ -1667,20 +1720,19 @@
             influencersTbody.appendChild(tr);
           });
 
-          // Render Transactions List
           const txsTbody = document.getElementById('txs-table-body');
           txsTbody.innerHTML = '';
           txs.forEach(t => {
             const tr = document.createElement('tr');
             const valStr = (t.amount_cents / 100).toFixed(2);
-            const badgeClass = t.status === 'COMPLETED' ? 'badge-success' : t.status === 'PENDING' ? 'badge-pending' : 'badge-danger';
+            const badgeClass = t.status === 'COMPLETED' ? 'badge-success' : t.status === 'PENDING' ? 'badge-pending' : (t.status === 'PENDING_COUPON' ? 'badge-pending' : 'badge-danger');
             const createdStr = new Date(t.created_at).toLocaleString('pt-BR');
             
             let actionBtn = '-';
             if (t.status === 'PENDING') {
               actionBtn = \`
                 <button class="btn-action btn-success" onclick="resolveTransaction('\${t.id}', 'COMPLETED', '\${t.phone}', \${t.amount_cents})">Aprovar</button>
-                <button class="btn-action btn-danger" onclick="resolveTransaction('\${t.id}', 'REJECTED')">Recusar</button>
+                <button class="btn-action btn-danger" onclick="resolveTransaction('\${t.id}', 'REJECTED', '\${t.phone}')">Recusar</button>
               \`;
             }
 
@@ -1696,7 +1748,6 @@
             txsTbody.appendChild(tr);
           });
 
-          // Render Alerts list
           const pendingCount = txs.filter(t => t.status === 'PENDING').length;
           document.getElementById('recent-activity-list').innerHTML = pendingCount > 0 
             ? \`<strong style="color: var(--gold);">Há \${pendingCount} transações pendentes de aprovação manual na guia Financeiro!</strong>\` 
@@ -1758,6 +1809,16 @@
 
       window.resolveTransaction = async function(id, status, phone = null, amountCents = 0) {
         try {
+          // Get transaction details first
+          const resTx = await fetch(SB_URL + '/rest/v1/transactions?id=eq.' + id, { headers: SB_HEADERS });
+          const txData = await resTx.json();
+          const tx = txData[0];
+          if (!tx) {
+            alert("Transação não encontrada.");
+            return;
+          }
+
+          // 1. Update Transaction status
           const res = await fetch(SB_URL + '/rest/v1/transactions?id=eq.' + id, {
             method: 'PATCH',
             headers: SB_HEADERS,
@@ -1765,20 +1826,61 @@
           });
 
           if (res.ok) {
-            if (status === 'COMPLETED' && phone) {
+            // 2. Handle specific rules
+            if (status === 'COMPLETED' && tx.type === 'DEPOSIT' && phone) {
+              // Verify active percentage coupons
+              const resTxsList = await fetch(SB_URL + '/rest/v1/transactions?phone=eq.' + phone, { headers: SB_HEADERS });
+              const txList = await resTxsList.json();
+              const pendingCoupon = txList.find(t => t.type === 'DEPOSIT' && t.status === 'PENDING_COUPON');
+              let bonusCents = 0;
+              if (pendingCoupon && pendingCoupon.pix_key) {
+                const parts = pendingCoupon.pix_key.split(':');
+                const percent = Number(parts[2]) || 0;
+                bonusCents = Math.round(Number(amountCents) * (percent / 100));
+
+                // Mark coupon complete
+                await fetch(SB_URL + '/rest/v1/transactions?id=eq.' + pendingCoupon.id, {
+                  method: 'PATCH',
+                  headers: SB_HEADERS,
+                  body: JSON.stringify({ status: 'COMPLETED', amount_cents: bonusCents })
+                });
+              }
+
               const resProfile = await fetch(SB_URL + '/rest/v1/profiles?phone=eq.' + phone, { headers: SB_HEADERS });
               const pData = await resProfile.json();
               const currentProfile = pData[0];
               if (currentProfile) {
-                const newBal = Number(currentProfile.balance_cents) + Number(amountCents);
+                const newBal = Number(currentProfile.balance_cents) + Number(amountCents) + bonusCents;
                 await fetch(SB_URL + '/rest/v1/profiles?phone=eq.' + phone, {
                   method: 'PATCH',
                   headers: SB_HEADERS,
                   body: JSON.stringify({ balance_cents: newBal })
                 });
               }
+            } else if (status === 'REJECTED' && (tx.type === 'WITHDRAW' || tx.type === 'WITHDRAW_AFFILIATE') && phone) {
+              // REFUND user because withdrawal was rejected
+              const resProfile = await fetch(SB_URL + '/rest/v1/profiles?phone=eq.' + phone, { headers: SB_HEADERS });
+              const pData = await resProfile.json();
+              const currentProfile = pData[0];
+              if (currentProfile) {
+                if (tx.type === 'WITHDRAW') {
+                  const newBal = Number(currentProfile.balance_cents) + Number(tx.amount_cents);
+                  await fetch(SB_URL + '/rest/v1/profiles?phone=eq.' + phone, {
+                    method: 'PATCH',
+                    headers: SB_HEADERS,
+                    body: JSON.stringify({ balance_cents: newBal })
+                  });
+                } else if (tx.type === 'WITHDRAW_AFFILIATE') {
+                  const newCommBal = Number(currentProfile.comissao_saldo_cents) + Number(tx.amount_cents);
+                  await fetch(SB_URL + '/rest/v1/profiles?phone=eq.' + phone, {
+                    method: 'PATCH',
+                    headers: SB_HEADERS,
+                    body: JSON.stringify({ comissao_saldo_cents: newCommBal })
+                  });
+                }
+              }
             }
-            alert("Transação atualizada com sucesso!");
+            alert("Transação resolvida com sucesso!");
             loadDashboardData();
           } else {
             alert("Erro ao atualizar transação.");
@@ -1798,10 +1900,13 @@
         couponsList.forEach((c, idx) => {
           const div = document.createElement('div');
           div.className = 'coupon-list-item';
+          const typeStr = c.type === 'PERCENT' ? 'Primeiro Depósito' : 'Bônus Fixo';
+          const rewardVal = c.type === 'PERCENT' ? c.percent + '%' : 'R$ ' + (c.amountCents / 100).toFixed(2);
           div.innerHTML = \`
             <div>
               <strong style="color: #fff;">\${c.code}</strong> 
-              <span style="color: var(--success); font-size: 0.85rem; margin-left: 10px;">R$ \${(c.amountCents / 100).toFixed(2)} bônus</span>
+              <span style="color: var(--text-dim); font-size: 0.8rem; margin-left: 10px;">(\${typeStr})</span>
+              <span style="color: var(--success); font-size: 0.85rem; margin-left: 10px;">+\${rewardVal} bônus</span>
             </div>
             <button class="btn-action btn-danger" onclick="deleteCoupon(\${idx})">Apagar</button>
           \`;
@@ -1811,27 +1916,34 @@
 
       window.createCoupon = async function() {
         const code = document.getElementById('coupon-code').value.trim().toUpperCase();
-        const amount = parseFloat(document.getElementById('coupon-amount').value);
-        if (!code || isNaN(amount)) {
+        const type = document.getElementById('coupon-type').value;
+        const amountVal = parseFloat(document.getElementById('coupon-amount').value);
+        if (!code || isNaN(amountVal)) {
           alert("Preencha o código e o valor.");
           return;
         }
 
         try {
-          // Fetch existing coupons
           const res = await fetch(SB_URL + '/rest/v1/config?key=eq.coupons', { headers: SB_HEADERS });
           const data = await res.json();
           let coupons = (data[0] && data[0].value) 
             ? (typeof data[0].value === 'string' ? JSON.parse(data[0].value) : data[0].value)
-            : [{ code: 'BLOCK10', amountCents: 1000 }, { code: 'GANHE20', amountCents: 2000 }];
+            : [{ code: 'BLOCK10', amountCents: 1000, type: 'FIXED' }, { code: 'GANHE20', amountCents: 2000, type: 'FIXED' }];
 
-          // Add new
-          coupons.push({ code: code, amountCents: Math.round(amount * 100) });
+          // Prepare new coupon
+          const newCoupon = { code: code, type: type };
+          if (type === 'PERCENT') {
+            newCoupon.percent = amountVal;
+          } else {
+            newCoupon.amountCents = Math.round(amountVal * 100);
+          }
 
-          // Save to config table
-          const saveRes = await fetch(SB_URL + '/rest/v1/config', {
+          coupons.push(newCoupon);
+
+          // Save using merge-duplicates upsert format
+          const saveRes = await fetch(SB_URL + '/rest/v1/config?on_conflict=key', {
             method: 'POST',
-            headers: { ...SB_HEADERS, 'Prefer': 'resolution=merge' },
+            headers: { ...SB_HEADERS, 'Prefer': 'resolution=merge-duplicates' },
             body: JSON.stringify({ key: 'coupons', value: coupons })
           });
 
@@ -1839,7 +1951,7 @@
             document.getElementById('coupon-code').value = '';
             document.getElementById('coupon-amount').value = '';
             const status = document.getElementById('coupon-success-msg');
-            status.innerText = "Cupom criado!";
+            status.innerText = "Cupom adicionado!";
             setTimeout(() => status.innerText = '', 2500);
             loadDashboardData();
           } else {
@@ -1860,9 +1972,9 @@
 
           coupons.splice(idx, 1);
 
-          const saveRes = await fetch(SB_URL + '/rest/v1/config', {
+          const saveRes = await fetch(SB_URL + '/rest/v1/config?on_conflict=key', {
             method: 'POST',
-            headers: { ...SB_HEADERS, 'Prefer': 'resolution=merge' },
+            headers: { ...SB_HEADERS, 'Prefer': 'resolution=merge-duplicates' },
             body: JSON.stringify({ key: 'coupons', value: coupons })
           });
 
@@ -1881,9 +1993,9 @@
         const tiktokId = document.getElementById('pixel-tiktok-id').value.trim();
 
         try {
-          const res = await fetch(SB_URL + '/rest/v1/config', {
+          const res = await fetch(SB_URL + '/rest/v1/config?on_conflict=key', {
             method: 'POST',
-            headers: { ...SB_HEADERS, 'Prefer': 'resolution=merge' },
+            headers: { ...SB_HEADERS, 'Prefer': 'resolution=merge-duplicates' },
             body: JSON.stringify({
               key: 'ads_settings',
               value: { metaPixelId: metaId, tiktokPixelId: tiktokId }
@@ -1908,9 +2020,9 @@
         const secret = document.getElementById('gateway-client-secret').value.trim();
 
         try {
-          const res = await fetch(SB_URL + '/rest/v1/config', {
+          const res = await fetch(SB_URL + '/rest/v1/config?on_conflict=key', {
             method: 'POST',
-            headers: { ...SB_HEADERS, 'Prefer': 'resolution=merge' },
+            headers: { ...SB_HEADERS, 'Prefer': 'resolution=merge-duplicates' },
             body: JSON.stringify({
               key: 'gateway_settings',
               value: { gatewayName: name, clientId: clientId, clientSecret: secret }
@@ -1935,7 +2047,6 @@
         const minBet = parseFloat(document.getElementById('settings-min-bet').value);
         const maxBet = parseFloat(document.getElementById('settings-max-bet').value);
         
-        // Parse quick bets
         const presetsStr = document.getElementById('settings-presets').value;
         const presets = presetsStr.split(',').map(s => parseFloat(s.trim())).filter(n => !isNaN(n));
 
@@ -1953,9 +2064,10 @@
         };
 
         try {
-          const res = await fetch(SB_URL + '/rest/v1/config', {
+          // Fix upsert query params and Prefer resolution=merge-duplicates headers to avoid 409 conflict
+          const res = await fetch(SB_URL + '/rest/v1/config?on_conflict=key', {
             method: 'POST',
-            headers: { ...SB_HEADERS, 'Prefer': 'resolution=merge' },
+            headers: { ...SB_HEADERS, 'Prefer': 'resolution=merge-duplicates' },
             body: JSON.stringify({
               key: 'game_settings',
               value: config
