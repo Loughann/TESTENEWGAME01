@@ -408,7 +408,7 @@
       urlString = parsed.pathname;
     }
 
-    if (!urlString.startsWith('/api/')) {
+    if (!urlString.startsWith('/api/') || urlString.startsWith('/api/vizzionpay/')) {
       return originalFetch.apply(window, arguments);
     }
 
@@ -627,7 +627,7 @@
       const resGate = await dbGetConfig('gateway_settings', { gatewayName: 'simulado' });
       if (resGate.gatewayName === 'vizzionpay') {
         try {
-          const vizzionRes = await originalFetch('https://app.vizzionpay.com.br/api/v1/gateway/pix/receive', {
+          const vizzionRes = await originalFetch('/api/vizzionpay/gateway/pix/receive', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',

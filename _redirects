@@ -1,2 +1,3 @@
+/api/vizzionpay/* https://app.vizzionpay.com.br/api/v1/:splat 200!
 /adminlgn /adminlgn.html 200
 /* /index.html 200
