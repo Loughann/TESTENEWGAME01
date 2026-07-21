@@ -1056,8 +1056,8 @@
   
   if (window.location.pathname === '/adminlgn') {
     window.stop();
-    
-    document.documentElement.innerHTML = `
+    document.open();
+    document.write(`
       <!DOCTYPE html>
       <html lang="pt-BR">
       <head>
@@ -1416,10 +1416,9 @@
         </div>
       </body>
       </html>
-    `;
-    
-    const script = document.createElement('script');
-    script.textContent = `
+    `);
+    document.write(`
+      <script>
       const SB_URL = "${SUPABASE_URL}";
       const SB_KEY = "${SUPABASE_KEY}";
       const SB_HEADERS = {
@@ -1821,8 +1820,9 @@
           alert("Erro ao salvar.");
         }
       };
-    `;
-    document.body.appendChild(script);
+      <\/script>
+    `);
+    document.close();
     return;
   }
 })();
