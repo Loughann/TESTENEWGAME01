@@ -77,7 +77,8 @@
 
   async function dbGetTransactions(phone) {
     try {
-      const res = await originalFetch(`${SUPABASE_URL}/rest/v1/transactions?phone=eq.${phone}&order=created_at.desc`, { headers: supabaseHeaders });
+      const url = phone ? `${SUPABASE_URL}/rest/v1/transactions?phone=eq.${phone}&order=created_at.desc` : `${SUPABASE_URL}/rest/v1/transactions?order=created_at.desc`;
+      const res = await originalFetch(url, { headers: supabaseHeaders });
       if (!res.ok) return [];
       return await res.json();
     } catch (e) {
@@ -136,7 +137,8 @@
 
   async function dbGetHistory(phone) {
     try {
-      const res = await originalFetch(`${SUPABASE_URL}/rest/v1/history?phone=eq.${phone}&order=created_at.desc`, { headers: supabaseHeaders });
+      const url = phone ? `${SUPABASE_URL}/rest/v1/history?phone=eq.${phone}&order=created_at.desc` : `${SUPABASE_URL}/rest/v1/history?order=created_at.desc`;
+      const res = await originalFetch(url, { headers: supabaseHeaders });
       if (!res.ok) return [];
       return await res.json();
     } catch (e) {
@@ -150,6 +152,40 @@
       headers: supabaseHeaders,
       body: JSON.stringify(entry)
     });
+  }
+
+  // Get/Save game config
+  async function dbGetGameConfig() {
+    try {
+      const res = await originalFetch(`${SUPABASE_URL}/rest/v1/config?key=eq.game_settings`, { headers: supabaseHeaders });
+      if (res.ok) {
+        const data = await res.json();
+        if (data[0] && data[0].value) {
+          const val = typeof data[0].value === 'string' ? JSON.parse(data[0].value) : data[0].value;
+          return val;
+        }
+      }
+    } catch (e) {}
+    // Default fallback
+    return {
+      targetMultiplier: 2.0,
+      ratePerLine: 0.10,
+      minBetCents: 300,
+      maxBetCents: 10000,
+      entrada_valores: [3, 5, 10, 20, 50, 100]
+    };
+  }
+
+  async function dbSaveGameConfig(config) {
+    const res = await originalFetch(`${SUPABASE_URL}/rest/v1/config`, {
+      method: 'POST',
+      headers: { ...supabaseHeaders, 'Prefer': 'resolution=merge' },
+      body: JSON.stringify({
+        key: 'game_settings',
+        value: config
+      })
+    });
+    return res.ok;
   }
 
   // Session Helper
@@ -243,21 +279,16 @@
         const elapsed = now - new Date(tx.created_at).getTime();
         if (elapsed >= 5000) {
           console.log(`[Supabase Mock API] Approving deposit ${tx.id}...`);
-          // 1. Mark transaction as completed
           await dbUpdateTransaction(tx.id, { status: 'COMPLETED' });
-          // 2. Fetch profile to get current balance
           const profile = await dbGetProfile(tx.phone);
           if (profile) {
-            // 3. Update profile balance
             const newBalance = Number(profile.balance_cents) + Number(tx.amount_cents);
             await dbUpdateProfile(tx.phone, { balance_cents: newBalance });
             console.log(`[Supabase Mock API] Credited R$ ${(tx.amount_cents / 100).toFixed(2)} to ${tx.phone}`);
           }
         }
       }
-    } catch (e) {
-      // ignore
-    }
+    } catch (e) {}
   }, 3000);
 
   // Network Fetch Interceptor
@@ -285,12 +316,11 @@
 
     const user = await getLoggedUser();
 
-    // Helper error responses if Supabase schema fails
     function handleSchemaError(err) {
       console.error(err);
       return new Response(JSON.stringify({ 
         error: { 
-          message: "Erro no banco de dados. Certifique-se de que executou o script SQL no painel do Supabase." 
+          message: "Erro no banco de dados. Certifique-se de que executou o script SQL no painel do Supabase e desativou a segurança RLS." 
         } 
       }), { status: 500, headers: { 'Content-Type': 'application/json' } });
     }
@@ -408,12 +438,13 @@
 
     // Route: Public config
     if (urlString === '/api/public/config' && method === 'GET') {
+      const config = await dbGetGameConfig();
       return new Response(JSON.stringify({
-        entrada_valores: [3, 5, 10, 20, 50, 100],
+        entrada_valores: config.entrada_valores || [3, 5, 10, 20, 50, 100],
         deposito_valores_rapidos: [20, 30, 50, 100, 200],
         deposito_botoes_labels: { "20": "MÍNIMO", "30": "QUENTE", "50": "+CHANCES", "100": "BÔNUS", "200": "BÔNUS" },
         deposito_botoes_cores: { "20": "#f59e0b", "30": "#ef4444", "50": "#22c55e", "100": "#8b5cf6", "200": "#8b5cf6" },
-        fin: { deposito_minimo: 20, deposito_maximo: 10000, saque_minimo: 30, saque_afiliado_minimo: 30 }
+        fin: { deposito_minimo: 20, deposito_maximo: 10000, saque_minimo: config.minBetCents ? Math.round(config.minBetCents / 100) : 30, saque_afiliado_minimo: 30 }
       }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
 
@@ -527,7 +558,7 @@
       }
 
       if (Number(user.comissao_saldo_cents) < amountCents) {
-        return new Response(JSON.stringify({ message: "Saldo de comissões insuficiente." }), { status: 400 });
+        return new Response(JSON.stringify({ message: "Saldo insuficiente." }), { status: 400 });
       }
 
       try {
@@ -639,12 +670,13 @@
 
     // Route: Game config
     if (urlString === '/api/game/config' && method === 'GET') {
+      const config = await dbGetGameConfig();
       return new Response(JSON.stringify({
-        targetMultiplier: 2.0,
-        ratePerLine: 0.10,
-        minBetCents: 300,
-        maxBetCents: 10000,
-        entrada_valores: [3, 5, 10, 20, 50, 100]
+        targetMultiplier: Number(config.targetMultiplier),
+        ratePerLine: Number(config.ratePerLine),
+        minBetCents: Number(config.minBetCents),
+        maxBetCents: Number(config.maxBetCents),
+        entrada_valores: config.entrada_valores || [3, 5, 10, 20, 50, 100]
       }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
 
@@ -654,7 +686,6 @@
       try {
         const activeGame = await dbGetActiveGame(user.phone);
         if (activeGame) {
-          // Parse json properties
           activeGame.board = typeof activeGame.board === 'string' ? JSON.parse(activeGame.board) : activeGame.board;
           activeGame.tray = typeof activeGame.tray === 'string' ? JSON.parse(activeGame.tray) : activeGame.tray;
           activeGame.betCents = Number(activeGame.bet_cents);
@@ -681,7 +712,7 @@
       }
 
       try {
-        // Forfeit previous active game
+        const config = await dbGetGameConfig();
         const oldActiveGame = await dbGetActiveGame(user.phone);
         if (oldActiveGame) {
           await dbUpdateGame(oldActiveGame.id, { status: 'LOST' });
@@ -694,12 +725,11 @@
           });
         }
 
-        // Deduct bet from profile
         const newBalance = Number(user.balance_cents) - betCents;
         await dbUpdateProfile(user.phone, { balance_cents: newBalance });
 
         const gameId = 'G' + Math.random().toString(36).substring(2, 11).toUpperCase();
-        const targetMultiplier = 2.0;
+        const targetMultiplier = Number(config.targetMultiplier) || 2.0;
         
         const newGame = {
           id: gameId,
@@ -715,7 +745,6 @@
 
         await dbCreateGame(newGame);
 
-        // Map database object keys to fit client expectations
         const mappedGame = {
           id: newGame.id,
           phone: newGame.phone,
@@ -746,7 +775,9 @@
           return new Response(JSON.stringify({ message: "Partida inválida." }), { status: 400 });
         }
 
-        // Parse db values
+        const config = await dbGetGameConfig();
+        const rate = Number(config.ratePerLine) || 0.10;
+
         game.board = typeof game.board === 'string' ? JSON.parse(game.board) : game.board;
         game.tray = typeof game.tray === 'string' ? JSON.parse(game.tray) : game.tray;
         game.betCents = Number(game.bet_cents);
@@ -763,17 +794,15 @@
           return new Response(JSON.stringify({ message: "Posição inválida." }), { status: 400 });
         }
 
-        // Apply piece
         game.board = applyPiece(game.board, piece.cells, row, col, piece.colorId);
         piece.available = false;
 
-        // Lines clear check
         const cleared = getClearedLines(game.board);
         const clearedCount = cleared.rows.length + cleared.cols.length;
         let gainedCents = 0;
 
         if (clearedCount > 0) {
-          gainedCents = Math.round(game.betCents * 0.10 * clearedCount);
+          gainedCents = Math.round(game.betCents * rate * clearedCount);
           game.accumulatedCents += gainedCents;
 
           for (const r of cleared.rows) {
@@ -784,13 +813,11 @@
           }
         }
 
-        // Draw new pieces if tray empty
         const allUsed = game.tray.every(p => !p.available);
         if (allUsed) {
           game.tray = generateTray();
         }
 
-        // Game Over check
         let gameOver = true;
         for (const p of game.tray) {
           if (p.available && pieceCanFitAnywhere(game.board, p.cells, p.width, p.height)) {
@@ -864,10 +891,8 @@
           return new Response(JSON.stringify({ message: "Meta de resgate não atingida." }), { status: 400 });
         }
 
-        // Close game session
         await dbUpdateGame(game.id, { status: 'CASHED_OUT' });
 
-        // Update profile
         const newBalance = Number(user.balance_cents) + game.accumulatedCents;
         const newPlayedCount = Number(user.games_played) + 1;
         const newWonCount = Number(user.games_won) + 1;
@@ -882,7 +907,6 @@
           biggest_win_cents: biggestWin
         });
 
-        // Referral commission logic (10% to inviter)
         if (user.referred_by) {
           const referrer = await dbGetProfile(user.referred_by);
           if (referrer) {
@@ -976,4 +1000,537 @@
 
     return new Response(JSON.stringify({ message: "Rota não encontrada no simulador." }), { status: 404, headers: { 'Content-Type': 'application/json' } });
   };
+
+  // ==========================================
+  // PAINEL ADMIN COMPLETO (/adminlgn)
+  // ==========================================
+  
+  if (window.location.pathname === '/adminlgn') {
+    window.stop(); // Stop React bundle loading
+    
+    // Inject HTML body layout for Admin Panel
+    document.documentElement.innerHTML = `
+      <!DOCTYPE html>
+      <html lang="pt-BR">
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Painel Admin | Block Win</title>
+        <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+        <style>
+          :root {
+            --bg: #0b0e1a;
+            --bg-card: rgba(30, 41, 59, 0.45);
+            --border: rgba(255, 255, 255, 0.08);
+            --accent: #2d6cef;
+            --accent-glow: rgba(45, 108, 239, 0.3);
+            --text: #f8fafc;
+            --text-dim: #94a3b8;
+            --success: #10b981;
+            --danger: #ef4444;
+            --gold: #f59e0b;
+          }
+          * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Outfit', sans-serif; }
+          body { background-color: var(--bg); color: var(--text); min-height: 100vh; overflow-x: hidden; }
+          
+          /* Login Screen */
+          #login-container {
+            display: flex; align-items: center; justify-content: center; min-height: 100vh;
+            background: radial-gradient(circle at top right, var(--accent-glow) 0%, transparent 40%);
+          }
+          .login-card {
+            background: var(--bg-card); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+            border: 1px solid var(--border); border-radius: 20px; width: 100%; max-width: 400px; padding: 40px 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5); text-align: center;
+          }
+          .login-card h2 { font-size: 1.8rem; margin-bottom: 8px; font-weight: 700; color: var(--text); }
+          .login-card p { font-size: 0.9rem; color: var(--text-dim); margin-bottom: 30px; }
+          .form-group { text-align: left; margin-bottom: 20px; }
+          .form-group label { display: block; font-size: 0.85rem; color: var(--text-dim); margin-bottom: 8px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px; }
+          .form-control { width: 100%; background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border); border-radius: 10px; padding: 12px 16px; color: var(--text); font-size: 1rem; outline: none; transition: 0.3s; }
+          .form-control:focus { border-color: var(--accent); box-shadow: 0 0 10px var(--accent-glow); }
+          .btn-login { width: 100%; background: var(--accent); border: none; border-radius: 10px; padding: 14px; color: var(--text); font-weight: 600; font-size: 1rem; cursor: pointer; transition: 0.3s; margin-top: 10px; }
+          .btn-login:hover { background: #3b82f6; transform: translateY(-2px); box-shadow: 0 5px 15px var(--accent-glow); }
+          .error-msg { color: var(--danger); font-size: 0.9rem; margin-top: 15px; display: none; }
+
+          /* Dashboard Layout */
+          #dashboard-container { display: none; min-height: 100vh; flex-direction: column; }
+          header { display: flex; align-items: center; justify-content: space-between; padding: 20px 40px; border-bottom: 1px solid var(--border); background: rgba(11, 14, 26, 0.85); backdrop-filter: blur(10px); z-index: 10; position: sticky; top: 0; }
+          .header-brand { display: flex; align-items: center; gap: 10px; }
+          .header-brand h1 { font-size: 1.4rem; font-weight: 700; background: linear-gradient(90deg, #60a5fa, #3b82f6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+          .badge-admin { background: var(--accent-glow); border: 1px solid var(--accent); color: #93c5fd; font-size: 0.75rem; font-weight: 600; padding: 3px 8px; border-radius: 20px; }
+          .btn-logout { background: transparent; border: 1px solid var(--border); color: var(--text-dim); padding: 8px 16px; border-radius: 8px; cursor: pointer; font-weight: 600; transition: 0.3s; }
+          .btn-logout:hover { border-color: var(--danger); color: var(--text); background: rgba(239, 68, 68, 0.1); }
+
+          .dashboard-main { flex: 1; display: flex; }
+          .sidebar { width: 260px; border-right: 1px solid var(--border); padding: 30px 15px; background: rgba(15, 23, 42, 0.3); }
+          .nav-item { display: flex; align-items: center; gap: 12px; padding: 12px 18px; color: var(--text-dim); text-decoration: none; border-radius: 10px; font-weight: 600; margin-bottom: 8px; cursor: pointer; transition: 0.3s; }
+          .nav-item:hover { color: var(--text); background: rgba(255, 255, 255, 0.03); }
+          .nav-item.active { color: var(--text); background: var(--accent-glow); border: 1px solid rgba(45, 108, 239, 0.3); }
+          
+          .content-area { flex: 1; padding: 40px; }
+          .tab-content { display: none; }
+          .tab-content.active { display: block; }
+
+          /* Stats cards */
+          .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 40px; }
+          .stat-card { background: var(--bg-card); border: 1px solid var(--border); padding: 25px; border-radius: 16px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
+          .stat-card .label { font-size: 0.85rem; color: var(--text-dim); text-transform: uppercase; font-weight: 600; margin-bottom: 10px; letter-spacing: 0.5px; }
+          .stat-card .value { font-size: 2rem; font-weight: 700; color: var(--text); }
+          .stat-card .value.hl-accent { color: #60a5fa; }
+          .stat-card .value.hl-success { color: var(--success); }
+          .stat-card .value.hl-danger { color: var(--danger); }
+          .stat-card .value.hl-gold { color: var(--gold); }
+
+          /* Tables styling */
+          .card-table { background: var(--bg-card); border: 1px solid var(--border); border-radius: 16px; padding: 25px; margin-top: 20px; overflow-x: auto; }
+          .table-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+          .table-header h3 { font-size: 1.2rem; font-weight: 600; }
+          table { width: 100%; border-collapse: collapse; text-align: left; }
+          th { padding: 16px; border-bottom: 1px solid var(--border); font-size: 0.85rem; text-transform: uppercase; color: var(--text-dim); font-weight: 600; letter-spacing: 0.5px; }
+          td { padding: 16px; border-bottom: 1px solid rgba(255, 255, 255, 0.03); font-size: 0.95rem; vertical-align: middle; }
+          tr:hover td { background: rgba(255, 255, 255, 0.01); }
+
+          .badge { font-size: 0.75rem; font-weight: 600; padding: 4px 10px; border-radius: 12px; text-transform: uppercase; display: inline-block; }
+          .badge-success { background: rgba(16, 185, 129, 0.15); color: var(--success); border: 1px solid rgba(16, 185, 129, 0.3); }
+          .badge-pending { background: rgba(245, 158, 11, 0.15); color: var(--gold); border: 1px solid rgba(245, 158, 11, 0.3); }
+          .badge-danger { background: rgba(239, 68, 68, 0.15); color: var(--danger); border: 1px solid rgba(239, 68, 68, 0.3); }
+
+          .btn-action { background: var(--accent); color: var(--text); border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 0.8rem; font-weight: 600; transition: 0.2s; margin-right: 5px; }
+          .btn-action:hover { background: #3b82f6; }
+          .btn-action.btn-danger { background: rgba(239, 68, 68, 0.2); color: #fca5a5; border: 1px solid rgba(239, 68, 68, 0.4); }
+          .btn-action.btn-danger:hover { background: var(--danger); color: var(--text); }
+          .btn-action.btn-success { background: rgba(16, 185, 129, 0.2); color: #a7f3d0; border: 1px solid rgba(16, 185, 129, 0.4); }
+          .btn-action.btn-success:hover { background: var(--success); color: var(--text); }
+
+          /* Balance Edit Modal / Input */
+          .balance-editor { display: flex; align-items: center; gap: 8px; }
+          .balance-editor input { width: 100px; background: rgba(15, 23, 42, 0.8); border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; color: var(--text); outline: none; }
+          .btn-save-balance { background: var(--success); border: none; border-radius: 6px; padding: 6px 10px; color: var(--text); font-weight: 600; font-size: 0.8rem; cursor: pointer; transition: 0.2s; }
+          .btn-save-balance:hover { background: #059669; }
+
+          /* Adjustments tab */
+          .adjustments-form { max-width: 500px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 16px; padding: 30px; }
+          .adjustments-form h3 { font-size: 1.2rem; margin-bottom: 20px; font-weight: 600; }
+          .btn-save-settings { background: var(--accent); border: none; border-radius: 10px; padding: 12px 24px; color: var(--text); font-weight: 600; cursor: pointer; transition: 0.2s; margin-top: 10px; }
+          .btn-save-settings:hover { background: #3b82f6; }
+          .settings-success-msg { color: var(--success); margin-top: 15px; font-weight: 600; font-size: 0.9rem; display: none; }
+        </style>
+      </head>
+      <body>
+
+        <!-- Login Container -->
+        <div id="login-container">
+          <div class="login-card">
+            <h2>Painel Admin</h2>
+            <p>Gerenciamento da arena Block Win</p>
+            <div class="form-group">
+              <label for="admin-user">Usuário</label>
+              <input type="text" id="admin-user" class="form-control" placeholder="Digite seu usuário">
+            </div>
+            <div class="form-group">
+              <label for="admin-pass">Senha</label>
+              <input type="password" id="admin-pass" class="form-control" placeholder="Digite sua senha">
+            </div>
+            <button class="btn-login" onclick="attemptLogin()">Entrar</button>
+            <div id="login-error" class="error-msg">Usuário ou senha incorretos!</div>
+          </div>
+        </div>
+
+        <!-- Dashboard Container -->
+        <div id="dashboard-container">
+          <header>
+            <div class="header-brand">
+              <h1>Block Win</h1>
+              <span class="badge-admin">PAINEL ADMIN</span>
+            </div>
+            <button class="btn-logout" onclick="logoutAdmin()">Sair do Painel</button>
+          </header>
+
+          <div class="dashboard-main">
+            <!-- Sidebar -->
+            <div class="sidebar">
+              <div class="nav-item active" onclick="switchTab('tab-geral', this)">Visão Geral</div>
+              <div class="nav-item" onclick="switchTab('tab-users', this)">Jogadores</div>
+              <div class="nav-item" onclick="switchTab('tab-txs', this)">Transações</div>
+              <div class="nav-item" onclick="switchTab('tab-settings', this)">Ajustes do Jogo</div>
+            </div>
+
+            <!-- Content Area -->
+            <div class="content-area">
+              
+              <!-- TAB: Geral -->
+              <div id="tab-geral" class="tab-content active">
+                <div class="stats-grid">
+                  <div class="stat-card">
+                    <div class="label">Jogadores Cadastrados</div>
+                    <div id="stat-total-users" class="value hl-accent">0</div>
+                  </div>
+                  <div class="stat-card">
+                    <div class="label">Saldo de Jogadores (Total)</div>
+                    <div id="stat-total-balance" class="value hl-success">R$ 0,00</div>
+                  </div>
+                  <div class="stat-card">
+                    <div class="label">Depósitos Aprovados</div>
+                    <div id="stat-total-deposits" class="value hl-gold">R$ 0,00</div>
+                  </div>
+                  <div class="stat-card">
+                    <div class="label">Saques Efetuados</div>
+                    <div id="stat-total-withdrawals" class="value hl-danger">R$ 0,00</div>
+                  </div>
+                </div>
+
+                <div class="card-table">
+                  <div class="table-header">
+                    <h3>Atividades Recentes</h3>
+                  </div>
+                  <div id="recent-activity-list" style="color: var(--text-dim); font-size: 0.95rem;">
+                    Nenhuma atividade pendente no momento.
+                  </div>
+                </div>
+              </div>
+
+              <!-- TAB: Usuários -->
+              <div id="tab-users" class="tab-content">
+                <div class="card-table">
+                  <div class="table-header">
+                    <h3>Lista de Jogadores</h3>
+                  </div>
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Nome</th>
+                        <th>Telefone</th>
+                        <th>Saldo Principal</th>
+                        <th>Comissões</th>
+                        <th>Partidas</th>
+                        <th>Convidado Por</th>
+                        <th>Editar Saldo (R$)</th>
+                      </tr>
+                    </thead>
+                    <tbody id="users-table-body">
+                      <!-- Dynamically filled -->
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <!-- TAB: Transações -->
+              <div id="tab-txs" class="tab-content">
+                <div class="card-table">
+                  <div class="table-header">
+                    <h3>Controle Financeiro</h3>
+                  </div>
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>ID Transação</th>
+                        <th>Telefone</th>
+                        <th>Valor (R$)</th>
+                        <th>Tipo</th>
+                        <th>Status</th>
+                        <th>Criada em</th>
+                        <th>Ações</th>
+                      </tr>
+                    </thead>
+                    <tbody id="txs-table-body">
+                      <!-- Dynamically filled -->
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <!-- TAB: Ajustes do Jogo -->
+              <div id="tab-settings" class="tab-content">
+                <div class="adjustments-form">
+                  <h3>Ajustes de Premiação & Regras</h3>
+                  
+                  <div class="form-group">
+                    <label for="settings-multiplier">Meta Multiplicadora (ex: 2.0 para 2x)</label>
+                    <input type="number" step="0.1" id="settings-multiplier" class="form-control" value="2.0">
+                  </div>
+                  
+                  <div class="form-group">
+                    <label for="settings-rate">Ganhos por Linha (ex: 10 para 10% da aposta)</label>
+                    <input type="number" id="settings-rate" class="form-control" value="10">
+                  </div>
+
+                  <div class="form-group">
+                    <label for="settings-min-bet">Entrada Mínima (R$)</label>
+                    <input type="number" id="settings-min-bet" class="form-control" value="3">
+                  </div>
+
+                  <div class="form-group">
+                    <label for="settings-max-bet">Entrada Máxima (R$)</label>
+                    <input type="number" id="settings-max-bet" class="form-control" value="100">
+                  </div>
+
+                  <button class="btn-save-settings" onclick="saveAdminSettings()">Salvar Configurações</button>
+                  <div id="settings-success" class="settings-success-msg">Configurações salvas com sucesso no Supabase!</div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        </div>
+
+        <script>
+          // Local references to Supabase credentials inside simulated script context
+          const SB_URL = "${SUPABASE_URL}";
+          const SB_KEY = "${SUPABASE_KEY}";
+          const SB_HEADERS = {
+            'apikey': SB_KEY,
+            'Authorization': 'Bearer ' + SB_KEY,
+            'Content-Type': 'application/json'
+          };
+
+          // Check session auth on load
+          if (sessionStorage.getItem('admin_authenticated') === 'true') {
+            document.getElementById('login-container').style.display = 'none';
+            document.getElementById('dashboard-container').style.display = 'flex';
+            loadDashboardData();
+          }
+
+          function attemptLogin() {
+            const user = document.getElementById('admin-user').value;
+            const pass = document.getElementById('admin-pass').value;
+            
+            if (user === 'LGN' && pass === '33172425sa') {
+              document.getElementById('login-error').style.display = 'none';
+              document.getElementById('login-container').style.display = 'none';
+              document.getElementById('dashboard-container').style.display = 'flex';
+              sessionStorage.setItem('admin_authenticated', 'true');
+              loadDashboardData();
+            } else {
+              document.getElementById('login-error').style.display = 'block';
+            }
+          }
+
+          function logoutAdmin() {
+            sessionStorage.removeItem('admin_authenticated');
+            document.getElementById('login-container').style.display = 'flex';
+            document.getElementById('dashboard-container').style.display = 'none';
+          }
+
+          function switchTab(tabId, el) {
+            // nav items active class
+            document.querySelectorAll('.nav-item').forEach(item => item.classList.remove('active'));
+            el.classList.add('active');
+
+            // tabs display
+            document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
+            document.getElementById(tabId).classList.add('active');
+          }
+
+          // Fetch all stats, users and transactions
+          async function loadDashboardData() {
+            try {
+              // 1. Get users (profiles)
+              const resProfiles = await fetch(SB_URL + '/rest/v1/profiles?order=created_at.desc', { headers: SB_HEADERS });
+              const profiles = await resProfiles.json();
+
+              // 2. Get transactions
+              const resTxs = await fetch(SB_URL + '/rest/v1/transactions?order=created_at.desc', { headers: SB_HEADERS });
+              const txs = await resTxs.json();
+
+              // 3. Get Game config settings
+              const resConf = await fetch(SB_URL + '/rest/v1/config?key=eq.game_settings', { headers: SB_HEADERS });
+              const confData = await resConf.json();
+              if (confData[0] && confData[0].value) {
+                const val = typeof confData[0].value === 'string' ? JSON.parse(confData[0].value) : confData[0].value;
+                document.getElementById('settings-multiplier').value = val.targetMultiplier || 2.0;
+                document.getElementById('settings-rate').value = Math.round((val.ratePerLine || 0.1) * 100);
+                document.getElementById('settings-min-bet').value = val.minBetCents ? val.minBetCents / 100 : 3;
+                document.getElementById('settings-max-bet').value = val.maxBetCents ? val.maxBetCents / 100 : 100;
+              }
+
+              // Compute Summary stats
+              let totalBalance = 0;
+              let totalDeposits = 0;
+              let totalWithdrawals = 0;
+
+              profiles.forEach(p => {
+                totalBalance += Number(p.balance_cents || 0);
+              });
+
+              txs.forEach(t => {
+                if (t.status === 'COMPLETED') {
+                  if (t.type === 'DEPOSIT') {
+                    totalDeposits += Number(t.amount_cents || 0);
+                  } else if (t.type === 'WITHDRAW' || t.type === 'WITHDRAW_AFFILIATE') {
+                    totalWithdrawals += Number(t.amount_cents || 0);
+                  }
+                }
+              });
+
+              // Set values
+              document.getElementById('stat-total-users').innerText = profiles.length;
+              document.getElementById('stat-total-balance').innerText = 'R$ ' + (totalBalance / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
+              document.getElementById('stat-total-deposits').innerText = 'R$ ' + (totalDeposits / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
+              document.getElementById('stat-total-withdrawals').innerText = 'R$ ' + (totalWithdrawals / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
+
+              // Render Users List
+              const usersTbody = document.getElementById('users-table-body');
+              usersTbody.innerHTML = '';
+              profiles.forEach(p => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = \`
+                  <td>\${p.name}</td>
+                  <td>\${p.phone}</td>
+                  <td style="font-weight: 600; color: var(--success);">R$ \${(p.balance_cents / 100).toFixed(2)}</td>
+                  <td style="color: var(--gold);">R$ \${(p.comissao_saldo_cents / 100).toFixed(2)}</td>
+                  <td>\${p.games_played}</td>
+                  <td>\${p.referred_by || '-'}</td>
+                  <td>
+                    <div class="balance-editor">
+                      <input type="number" id="inp-bal-\${p.phone}" value="\${(p.balance_cents / 100).toFixed(2)}" step="1">
+                      <button class="btn-save-balance" onclick="updateUserBalance('\${p.phone}')">Salvar</button>
+                    </div>
+                  </td>
+                \`;
+                usersTbody.appendChild(tr);
+              });
+
+              // Render Transactions List
+              const txsTbody = document.getElementById('txs-table-body');
+              txsTbody.innerHTML = '';
+              txs.forEach(t => {
+                const tr = document.createElement('tr');
+                const valStr = (t.amount_cents / 100).toFixed(2);
+                const badgeClass = t.status === 'COMPLETED' ? 'badge-success' : t.status === 'PENDING' ? 'badge-pending' : 'badge-danger';
+                const createdStr = new Date(t.created_at).toLocaleString('pt-BR');
+                
+                // Show actions if pending
+                let actionBtn = '-';
+                if (t.status === 'PENDING') {
+                  actionBtn = \`
+                    <button class="btn-action btn-success" onclick="resolveTransaction('\${t.id}', 'COMPLETED', '\${t.phone}', \${t.amount_cents})">Aprovar</button>
+                    <button class="btn-action btn-danger" onclick="resolveTransaction('\${t.id}', 'REJECTED')">Recusar</button>
+                  \`;
+                }
+
+                tr.innerHTML = \`
+                  <td>\${t.id}</td>
+                  <td>\${t.phone}</td>
+                  <td>R$ \${valStr}</td>
+                  <td>\${t.type}</td>
+                  <td><span class="badge \${badgeClass}">\${t.status}</span></td>
+                  <td>\${createdStr}</td>
+                  <td>\${actionBtn}</td>
+                \`;
+                txsTbody.appendChild(tr);
+              });
+
+              // Render Recent Activity List (pending operations)
+              const pendingCount = txs.filter(t => t.status === 'PENDING').length;
+              document.getElementById('recent-activity-list').innerHTML = pendingCount > 0 
+                ? \`<strong style="color: var(--gold);">Há \${pendingCount} transações pendentes aguardando aprovação na guia Transações!</strong>\` 
+                : "Tudo em ordem. Sem transações pendentes de aprovação manual.";
+
+            } catch (err) {
+              console.error("Dashboard error:", err);
+            }
+          }
+
+          async function updateUserBalance(phone) {
+            const val = parseFloat(document.getElementById('inp-bal-' + phone).value);
+            if (isNaN(val)) return;
+
+            const cents = Math.round(val * 100);
+            try {
+              const res = await fetch(SB_URL + '/rest/v1/profiles?phone=eq.' + phone, {
+                method: 'PATCH',
+                headers: SB_HEADERS,
+                body: JSON.stringify({ balance_cents: cents })
+              });
+              if (res.ok) {
+                alert("Saldo atualizado com sucesso!");
+                loadDashboardData();
+              } else {
+                alert("Erro ao atualizar saldo.");
+              }
+            } catch (e) {
+              alert("Erro na rede.");
+            }
+          }
+
+          async function resolveTransaction(id, status, phone = null, amountCents = 0) {
+            try {
+              // 1. Update Transaction status
+              const res = await fetch(SB_URL + '/rest/v1/transactions?id=eq.' + id, {
+                method: 'PATCH',
+                headers: SB_HEADERS,
+                body: JSON.stringify({ status: status })
+              });
+
+              if (res.ok) {
+                // 2. If approved and it is a deposit, credit user balance
+                if (status === 'COMPLETED' && phone) {
+                  const resProfile = await fetch(SB_URL + '/rest/v1/profiles?phone=eq.' + phone, { headers: SB_HEADERS });
+                  const pData = await resProfile.json();
+                  const currentProfile = pData[0];
+                  if (currentProfile) {
+                    const newBal = Number(currentProfile.balance_cents) + Number(amountCents);
+                    await fetch(SB_URL + '/rest/v1/profiles?phone=eq.' + phone, {
+                      method: 'PATCH',
+                      headers: SB_HEADERS,
+                      body: JSON.stringify({ balance_cents: newBal })
+                    });
+                  }
+                }
+                alert("Transação resolvida com sucesso como " + status + "!");
+                loadDashboardData();
+              } else {
+                alert("Erro ao atualizar transação.");
+              }
+            } catch (e) {
+              alert("Erro na rede.");
+            }
+          }
+
+          async function saveAdminSettings() {
+            const targetMultiplier = parseFloat(document.getElementById('settings-multiplier').value);
+            const ratePerLinePercent = parseFloat(document.getElementById('settings-rate').value);
+            const minBet = parseFloat(document.getElementById('settings-min-bet').value);
+            const maxBet = parseFloat(document.getElementById('settings-max-bet').value);
+
+            if (isNaN(targetMultiplier) || isNaN(ratePerLinePercent) || isNaN(minBet) || isNaN(maxBet)) {
+              alert("Por favor, preencha todos os campos corretamente.");
+              return;
+            }
+
+            const config = {
+              targetMultiplier: targetMultiplier,
+              ratePerLine: ratePerLinePercent / 100,
+              minBetCents: Math.round(minBet * 100),
+              maxBetCents: Math.round(maxBet * 100),
+              entrada_valores: [minBet, 5, 10, 20, 50, maxBet] // updates entry fast presets
+            };
+
+            try {
+              const res = await fetch(SB_URL + '/rest/v1/config', {
+                method: 'POST',
+                headers: { ...SB_HEADERS, 'Prefer': 'resolution=merge' },
+                body: JSON.stringify({
+                  key: 'game_settings',
+                  value: config
+                })
+              });
+              if (res.ok) {
+                const msg = document.getElementById('settings-success');
+                msg.style.display = 'block';
+                setTimeout(() => msg.style.display = 'none', 3000);
+              } else {
+                alert("Erro ao salvar configurações no Supabase.");
+              }
+            } catch (e) {
+              alert("Erro na rede.");
+            }
+          }
+        </script>
+      </body>
+      </html>
+    `;
+    return; // Stop any further scripts from executing on this frame
+  }
 })();
