@@ -1973,7 +1973,7 @@
         }
       };
     `;
-    document.body.appendChild(script);
+    document.head.appendChild(script);
     return;
   }
 })();
