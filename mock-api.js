@@ -392,13 +392,7 @@
         const pixKey = tx.pix_key || '';
         const gatewayName = pixKey.startsWith('vizzionpay:') ? 'vizzionpay' : 'simulado';
 
-        if (gatewayName === 'simulado') {
-          const elapsed = Date.now() - new Date(tx.created_at).getTime();
-          if (elapsed >= 5000) {
-            console.log(`[Supabase Mock API] Auto-approving simulated deposit ${tx.id}...`);
-            await approveDepositTransaction(tx);
-          }
-        } else if (gatewayName === 'vizzionpay') {
+        if (gatewayName === 'vizzionpay') {
           const gatewayTxId = pixKey.split(':')[1];
           if (gatewayTxId) {
             try {

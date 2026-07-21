@@ -181,31 +181,7 @@ function getSessionUser(req) {
   return db.users[phone] || null;
 }
 
-// Periodically approve pending deposits in background
-setInterval(() => {
-  const db = readDB();
-  let updated = false;
 
-  db.transactions.forEach(tx => {
-    if (tx.type === 'DEPOSIT' && tx.status === 'PENDING') {
-      // Automatic approval after 5 seconds
-      const elapsed = Date.now() - new Date(tx.createdAt).getTime();
-      if (elapsed >= 5000) {
-        tx.status = 'COMPLETED';
-        const user = db.users[tx.phone];
-        if (user) {
-          user.balanceCents += tx.amountCents;
-          updated = true;
-          console.log(`[DEPOSIT] Auto-approved R$ ${(tx.amountCents / 100).toFixed(2)} for ${tx.phone}`);
-        }
-      }
-    }
-  });
-
-  if (updated) {
-    writeDB(db);
-  }
-}, 1000);
 
 // --- APIs ---
 
