@@ -42,6 +42,54 @@
     { cells: [[0, 0], [1, 0], [1, 1], [2, 1]], width: 2, height: 3 }
   ];
 
+  // Ads Pixel Tracking Helper
+  function trackEvent(name, data = {}) {
+    try {
+      if (window.fbq) {
+        window.fbq('track', name, data);
+      }
+      if (window.Ttp && window.Ttp.track) {
+        window.Ttp.track(name, data);
+      }
+    } catch (e) {}
+  }
+
+  // Load and Initialize Pixels dynamically on startup
+  (async function initPixels() {
+    try {
+      const res = await originalFetch(`${SUPABASE_URL}/rest/v1/config?key=eq.ads_settings`, { headers: supabaseHeaders });
+      if (res.ok) {
+        const data = await res.json();
+        if (data[0] && data[0].value) {
+          const val = typeof data[0].value === 'string' ? JSON.parse(data[0].value) : data[0].value;
+          const { metaPixelId, tiktokPixelId } = val;
+          
+          if (metaPixelId) {
+            !function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+            n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;
+            n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;
+            t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window,
+            document,'script','https://connect.facebook.net/en_US/fbevents.js');
+            fbq('init', metaPixelId);
+            fbq('track', 'PageView');
+            console.log(`[Pixels] Facebook Pixel ${metaPixelId} loaded.`);
+          }
+          
+          if (tiktokPixelId) {
+            !function(w,d,t){w.Ttp=w.Ttp||[];var tt=w.Ttp;tt.prepare=function(c,e){
+            var t=d.createElement("script");t.type="text/javascript",t.async=!0,t.src=c;
+            var n=d.getElementsByTagName("script")[0];n.parentNode.insertBefore(t,n)};
+            tt.prepare("https://analytics.tiktok.com/i18n/pixel/sdk.js?sdkid="+tiktokPixelId);
+            tt.track=function(e,t){w.Ttp.push([e,t])};
+            tt.track("PageView");
+            }(window, document, 'script');
+            console.log(`[Pixels] TikTok Pixel ${tiktokPixelId} loaded.`);
+          }
+        }
+      }
+    } catch(e) {}
+  })();
+
   // Supabase Table Helpers
   async function dbGetProfile(phone) {
     try {
@@ -154,28 +202,18 @@
     });
   }
 
-  // Get/Save game config
-  async function dbGetGameConfig() {
+  // Config Table helpers
+  async function dbGetConfig(key, defaultVal) {
     try {
-      const res = await originalFetch(`${SUPABASE_URL}/rest/v1/config?key=eq.game_settings`, { headers: supabaseHeaders });
+      const res = await originalFetch(`${SUPABASE_URL}/rest/v1/config?key=eq.${key}`, { headers: supabaseHeaders });
       if (res.ok) {
         const data = await res.json();
         if (data[0] && data[0].value) {
-          const val = typeof data[0].value === 'string' ? JSON.parse(data[0].value) : data[0].value;
-          return val;
+          return typeof data[0].value === 'string' ? JSON.parse(data[0].value) : data[0].value;
         }
       }
-    } catch (e) {}
-    // Default fallback settings
-    return {
-      targetMultiplier: 2.0,
-      ratePerLine: 0.10,
-      minBetCents: 300,
-      maxBetCents: 10000,
-      entrada_valores: [3, 5, 10, 20, 50, 100],
-      globalDifficulty: 'NORMAL',
-      globalRtpPercent: 80
-    };
+    } catch(e) {}
+    return defaultVal;
   }
 
   // Session Helper
@@ -211,42 +249,14 @@
     return false;
   }
 
-  // Smart Piece Drawer based on Retention Difficulty
-  function drawPiecesForDifficulty(board, difficulty) {
+  function generateTray() {
     const tray = [];
     for (let i = 0; i < 3; i++) {
-      let piece;
-      if (difficulty === 'EASY') {
-        // Small easy pieces: 1x1, 1x2, 2x1, 2x2, 1x3
-        const easyTemplates = PIECES_TEMPLATES.filter(p => p.cells.length <= 4 && p.width <= 2 && p.height <= 2);
-        const template = easyTemplates[Math.floor(Math.random() * easyTemplates.length)] || PIECES_TEMPLATES[0];
-        piece = template;
-      } else if (difficulty === 'HARD') {
-        // Large hard pieces: 3x3 square, 5x1 line, 1x5 line, L-shapes
-        const hardTemplates = PIECES_TEMPLATES.filter(p => p.cells.length >= 4 || p.width >= 3 || p.height >= 3);
-        const template = hardTemplates[Math.floor(Math.random() * hardTemplates.length)] || PIECES_TEMPLATES[0];
-        piece = template;
-      } else if (difficulty === 'FORCE_LOSS') {
-        // Draw a piece that CANNOT fit anywhere on the current board
-        let foundBlocked = null;
-        for (let attempt = 0; attempt < 50; attempt++) {
-          const t = PIECES_TEMPLATES[Math.floor(Math.random() * PIECES_TEMPLATES.length)];
-          if (!pieceCanFitAnywhere(board, t.cells, t.width, t.height)) {
-            foundBlocked = t;
-            break;
-          }
-        }
-        // Fallback to random if board is too empty
-        piece = foundBlocked || PIECES_TEMPLATES[Math.floor(Math.random() * PIECES_TEMPLATES.length)];
-      } else {
-        // NORMAL
-        piece = PIECES_TEMPLATES[Math.floor(Math.random() * PIECES_TEMPLATES.length)];
-      }
-      
+      const template = PIECES_TEMPLATES[Math.floor(Math.random() * PIECES_TEMPLATES.length)];
       tray.push({
-        cells: piece.cells,
-        width: piece.width,
-        height: piece.height,
+        cells: template.cells,
+        width: template.width,
+        height: template.height,
         colorId: Math.floor(Math.random() * 7) + 1,
         available: true
       });
@@ -302,6 +312,9 @@
           if (profile) {
             const newBalance = Number(profile.balance_cents) + Number(tx.amount_cents);
             await dbUpdateProfile(tx.phone, { balance_cents: newBalance });
+            
+            // Trigger meta ads deposit tracking event (Purchase)
+            trackEvent('Purchase', { value: tx.amount_cents / 100, currency: 'BRL' });
             console.log(`[Supabase Mock API] Credited R$ ${(tx.amount_cents / 100).toFixed(2)} to ${tx.phone}`);
           }
         }
@@ -338,7 +351,7 @@
       console.error(err);
       return new Response(JSON.stringify({ 
         error: { 
-          message: "Erro no banco de dados. Certifique-se de que executou o script SQL de atualização no painel do Supabase e desativou a segurança RLS." 
+          message: "Erro no banco de dados. Certifique-se de que executou o script SQL no painel do Supabase e desativou a segurança RLS." 
         } 
       }), { status: 500, headers: { 'Content-Type': 'application/json' } });
     }
@@ -371,10 +384,7 @@
           games_won: 0,
           total_won_cents: 0,
           biggest_win_cents: 0,
-          referred_by: null,
-          role: 'USER',
-          difficulty_override: 'DEFAULT',
-          custom_commission_rate: null
+          referred_by: null
         };
 
         if (referralCode) {
@@ -391,6 +401,9 @@
 
         await dbCreateProfile(newUser);
         localStorage.setItem('user_session_phone', cleanPhone);
+
+        // Tracker Meta Ads/TikTok registration event
+        trackEvent('CompleteRegistration');
 
         return new Response(JSON.stringify({
           user: { name: newUser.name, phone: newUser.phone },
@@ -459,7 +472,13 @@
 
     // Route: Public config
     if (urlString === '/api/public/config' && method === 'GET') {
-      const config = await dbGetGameConfig();
+      const config = await dbGetConfig('game_settings', {
+        targetMultiplier: 2.0,
+        ratePerLine: 0.10,
+        minBetCents: 300,
+        maxBetCents: 10000,
+        entrada_valores: [3, 5, 10, 20, 50, 100]
+      });
       return new Response(JSON.stringify({
         entrada_valores: config.entrada_valores || [3, 5, 10, 20, 50, 100],
         deposito_valores_rapidos: [20, 30, 50, 100, 200],
@@ -604,24 +623,22 @@
       }
     }
 
-    // Route: Coupon redeem (dynamic checking Supabase coupons table)
+    // Route: Coupon redeem
     if (urlString === '/api/cupons/resgatar' && method === 'POST') {
       if (!user) return new Response(JSON.stringify({ message: "Não autorizado" }), { status: 401 });
       const { codigo } = body;
       const codeUpper = (codigo || '').trim().toUpperCase();
-      
+
       try {
-        // Query coupon in Supabase
-        const resCoupon = await originalFetch(`${SUPABASE_URL}/rest/v1/coupons?code=eq.${codeUpper}`, { headers: supabaseHeaders });
-        if (!resCoupon.ok) {
+        // Fetch active coupons from config
+        const activeCoupons = await dbGetConfig('coupons', [
+          { code: 'BLOCK10', amountCents: 1000 },
+          { code: 'GANHE20', amountCents: 2000 }
+        ]);
+
+        const matchedCoupon = activeCoupons.find(c => c.code.trim().toUpperCase() === codeUpper);
+        if (!matchedCoupon) {
           return new Response(JSON.stringify({ message: "Cupom inválido ou expirado." }), { status: 400 });
-        }
-        
-        const couponsData = await resCoupon.json();
-        const coupon = couponsData[0];
-        
-        if (!coupon || Number(coupon.uses_count) >= Number(coupon.max_uses)) {
-          return new Response(JSON.stringify({ message: "Cupom esgotado ou inválido." }), { status: 400 });
         }
 
         const txs = await dbGetTransactions(user.phone);
@@ -630,17 +647,10 @@
           return new Response(JSON.stringify({ message: "Cupom já resgatado por você." }), { status: 400 });
         }
 
-        const rewardCents = Number(coupon.amount_cents);
+        const rewardCents = matchedCoupon.amountCents;
         const newBalance = Number(user.balance_cents) + rewardCents;
         
         await dbUpdateProfile(user.phone, { balance_cents: newBalance });
-
-        // Update coupon count
-        await originalFetch(`${SUPABASE_URL}/rest/v1/coupons?code=eq.${codeUpper}`, {
-          method: 'PATCH',
-          headers: supabaseHeaders,
-          body: JSON.stringify({ uses_count: Number(coupon.uses_count) + 1 })
-        });
 
         const txid = 'TX' + Math.random().toString(36).substring(2, 11).toUpperCase();
         await dbCreateTransaction({
@@ -665,11 +675,10 @@
     // Route: Affiliate info
     if (urlString === '/api/users/referrals' && method === 'GET') {
       if (!user) return new Response(JSON.stringify({ message: "Não autorizado" }), { status: 401 });
-      const commRate = user.custom_commission_rate !== null ? Number(user.custom_commission_rate) : 0.10;
       return new Response(JSON.stringify({
         refCode: user.referral_code,
         link: `${window.location.origin}/cadastro?ref=${user.referral_code}`,
-        commissionRate: commRate,
+        commissionRate: 0.10,
         totalCommissionCents: Number(user.total_commission_cents),
         comissao_saldo_cents: Number(user.comissao_saldo_cents),
         indicados_count: user.indicados_count
@@ -689,12 +698,10 @@
           completed.forEach(d => { n1DepositedCents += Number(d.amount_cents); });
         }
 
-        const commPercent = user.custom_commission_rate !== null ? Math.round(Number(user.custom_commission_rate) * 100) : 10;
-
         return new Response(JSON.stringify({
           codigo: user.referral_code,
           link: `${window.location.origin}/cadastro?ref=${user.referral_code}`,
-          comissao_nivel1_perc: commPercent,
+          comissao_nivel1_perc: 10,
           total_comissao_cents: Number(user.total_commission_cents),
           saldo_cents: Number(user.comissao_saldo_cents),
           indicados_count: user.indicados_count,
@@ -711,7 +718,13 @@
 
     // Route: Game config
     if (urlString === '/api/game/config' && method === 'GET') {
-      const config = await dbGetGameConfig();
+      const config = await dbGetConfig('game_settings', {
+        targetMultiplier: 2.0,
+        ratePerLine: 0.10,
+        minBetCents: 300,
+        maxBetCents: 10000,
+        entrada_valores: [3, 5, 10, 20, 50, 100]
+      });
       return new Response(JSON.stringify({
         targetMultiplier: Number(config.targetMultiplier),
         ratePerLine: Number(config.ratePerLine),
@@ -753,7 +766,7 @@
       }
 
       try {
-        const config = await dbGetGameConfig();
+        const config = await dbGetConfig('game_settings', { targetMultiplier: 2.0 });
         const oldActiveGame = await dbGetActiveGame(user.phone);
         if (oldActiveGame) {
           await dbUpdateGame(oldActiveGame.id, { status: 'LOST' });
@@ -772,10 +785,6 @@
         const gameId = 'G' + Math.random().toString(36).substring(2, 11).toUpperCase();
         const targetMultiplier = Number(config.targetMultiplier) || 2.0;
         
-        // Check difficulty level (Personal override or global default)
-        const activeDifficulty = user.difficulty_override !== 'DEFAULT' ? user.difficulty_override : (config.globalDifficulty || 'NORMAL');
-        const emptyBoard = Array(8).fill(0).map(() => Array(8).fill(0));
-
         const newGame = {
           id: gameId,
           phone: user.phone,
@@ -784,8 +793,8 @@
           accumulated_cents: 0,
           target_cents: Math.round(betCents * targetMultiplier),
           target_multiplier: targetMultiplier,
-          board: emptyBoard,
-          tray: drawPiecesForDifficulty(emptyBoard, activeDifficulty) // initial pieces
+          board: Array(8).fill(0).map(() => Array(8).fill(0)),
+          tray: generateTray()
         };
 
         await dbCreateGame(newGame);
@@ -801,6 +810,9 @@
           board: newGame.board,
           tray: newGame.tray
         };
+
+        // Trigger Meta/TikTok Ads event (InitiateCheckout)
+        trackEvent('InitiateCheckout', { value: betCents / 100, currency: 'BRL' });
 
         return new Response(JSON.stringify({ session: mappedGame }), { status: 200, headers: { 'Content-Type': 'application/json' } });
       } catch (err) {
@@ -820,7 +832,7 @@
           return new Response(JSON.stringify({ message: "Partida inválida." }), { status: 400 });
         }
 
-        const config = await dbGetGameConfig();
+        const config = await dbGetConfig('game_settings', { ratePerLine: 0.10 });
         const rate = Number(config.ratePerLine) || 0.10;
 
         game.board = typeof game.board === 'string' ? JSON.parse(game.board) : game.board;
@@ -858,11 +870,9 @@
           }
         }
 
-        // Draw new pieces if tray empty (smart drawer applying difficulty override or global default)
         const allUsed = game.tray.every(p => !p.available);
         if (allUsed) {
-          const activeDifficulty = user.difficulty_override !== 'DEFAULT' ? user.difficulty_override : (config.globalDifficulty || 'NORMAL');
-          game.tray = drawPiecesForDifficulty(game.board, activeDifficulty);
+          game.tray = generateTray();
         }
 
         let gameOver = true;
@@ -954,12 +964,10 @@
           biggest_win_cents: biggestWin
         });
 
-        // Referral commission logic using user's custom rate or standard 10%
         if (user.referred_by) {
           const referrer = await dbGetProfile(user.referred_by);
           if (referrer) {
-            const commRate = referrer.custom_commission_rate !== null ? Number(referrer.custom_commission_rate) : 0.10;
-            const commission = Math.round(game.betCents * commRate);
+            const commission = Math.round(game.betCents * 0.10);
             await dbUpdateProfile(referrer.phone, {
               comissao_saldo_cents: Number(referrer.comissao_saldo_cents) + commission,
               total_commission_cents: Number(referrer.total_commission_cents) + commission
@@ -1051,33 +1059,33 @@
   };
 
   // ==========================================
-  // EXPANDED ADMIN PANEL INTERCEPTOR (/adminlgn)
+  // PAINEL ADMIN COMPLETO (/adminlgn)
   // ==========================================
   
   if (window.location.pathname === '/adminlgn') {
-    window.stop();
-    document.open();
-    document.write(`
+    window.stop(); // Stop React bundle loading
+    
+    // Inject HTML layout with expanded sidebar links and forms
+    document.documentElement.innerHTML = `
       <!DOCTYPE html>
       <html lang="pt-BR">
       <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Painel Admin Profissional | Block Win</title>
+        <title>Painel Admin Completo | Block Win</title>
         <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
         <style>
           :root {
-            --bg: #070913;
-            --bg-card: rgba(22, 28, 45, 0.6);
+            --bg: #0b0e1a;
+            --bg-card: rgba(30, 41, 59, 0.45);
             --border: rgba(255, 255, 255, 0.08);
-            --accent: #3b82f6;
-            --accent-glow: rgba(59, 130, 246, 0.25);
+            --accent: #2d6cef;
+            --accent-glow: rgba(45, 108, 239, 0.3);
             --text: #f8fafc;
             --text-dim: #94a3b8;
             --success: #10b981;
             --danger: #ef4444;
             --gold: #f59e0b;
-            --purple: #8b5cf6;
           }
           * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Outfit', sans-serif; }
           body { background-color: var(--bg); color: var(--text); min-height: 100vh; overflow-x: hidden; }
@@ -1099,12 +1107,12 @@
           .form-control { width: 100%; background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border); border-radius: 10px; padding: 12px 16px; color: var(--text); font-size: 1rem; outline: none; transition: 0.3s; }
           .form-control:focus { border-color: var(--accent); box-shadow: 0 0 10px var(--accent-glow); }
           .btn-login { width: 100%; background: var(--accent); border: none; border-radius: 10px; padding: 14px; color: var(--text); font-weight: 600; font-size: 1rem; cursor: pointer; transition: 0.3s; margin-top: 10px; }
-          .btn-login:hover { background: #60a5fa; transform: translateY(-2px); box-shadow: 0 5px 15px var(--accent-glow); }
+          .btn-login:hover { background: #3b82f6; transform: translateY(-2px); box-shadow: 0 5px 15px var(--accent-glow); }
           .error-msg { color: var(--danger); font-size: 0.9rem; margin-top: 15px; display: none; }
 
           /* Dashboard Layout */
           #dashboard-container { display: none; min-height: 100vh; flex-direction: column; }
-          header { display: flex; align-items: center; justify-content: space-between; padding: 20px 40px; border-bottom: 1px solid var(--border); background: rgba(7, 9, 19, 0.85); backdrop-filter: blur(10px); z-index: 10; position: sticky; top: 0; }
+          header { display: flex; align-items: center; justify-content: space-between; padding: 20px 40px; border-bottom: 1px solid var(--border); background: rgba(11, 14, 26, 0.85); backdrop-filter: blur(10px); z-index: 10; position: sticky; top: 0; }
           .header-brand { display: flex; align-items: center; gap: 10px; }
           .header-brand h1 { font-size: 1.4rem; font-weight: 700; background: linear-gradient(90deg, #60a5fa, #3b82f6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
           .badge-admin { background: var(--accent-glow); border: 1px solid var(--accent); color: #93c5fd; font-size: 0.75rem; font-weight: 600; padding: 3px 8px; border-radius: 20px; }
@@ -1115,7 +1123,7 @@
           .sidebar { width: 260px; border-right: 1px solid var(--border); padding: 30px 15px; background: rgba(15, 23, 42, 0.3); }
           .nav-item { display: flex; align-items: center; gap: 12px; padding: 12px 18px; color: var(--text-dim); text-decoration: none; border-radius: 10px; font-weight: 600; margin-bottom: 8px; cursor: pointer; transition: 0.3s; }
           .nav-item:hover { color: var(--text); background: rgba(255, 255, 255, 0.03); }
-          .nav-item.active { color: var(--text); background: var(--accent-glow); border: 1px solid rgba(59, 130, 246, 0.3); }
+          .nav-item.active { color: var(--text); background: var(--accent-glow); border: 1px solid rgba(45, 108, 239, 0.3); }
           
           .content-area { flex: 1; padding: 40px; }
           .tab-content { display: none; }
@@ -1123,21 +1131,16 @@
 
           /* Stats cards */
           .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 20px; margin-bottom: 40px; }
-          .stat-card { background: var(--bg-card); border: 1px solid var(--border); padding: 25px; border-radius: 16px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); position: relative; overflow: hidden; }
+          .stat-card { background: var(--bg-card); border: 1px solid var(--border); padding: 25px; border-radius: 16px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
           .stat-card .label { font-size: 0.85rem; color: var(--text-dim); text-transform: uppercase; font-weight: 600; margin-bottom: 10px; letter-spacing: 0.5px; }
-          .stat-card .value { font-size: 2rem; font-weight: 700; color: var(--text); }
+          .stat-card .value { font-size: 1.8rem; font-weight: 700; color: var(--text); }
           .stat-card .value.hl-accent { color: #60a5fa; }
           .stat-card .value.hl-success { color: var(--success); }
           .stat-card .value.hl-danger { color: var(--danger); }
           .stat-card .value.hl-gold { color: var(--gold); }
-          .stat-card .value.hl-purple { color: var(--purple); }
-          
-          /* Visual Retention Bank Balance */
-          .bar-chart-container { margin-top: 15px; width: 100%; background: rgba(255,255,255,0.05); height: 10px; border-radius: 5px; overflow: hidden; }
-          .bar-chart-fill { height: 100%; background: linear-gradient(90deg, var(--accent), var(--purple)); border-radius: 5px; width: 0%; transition: 1s; }
 
           /* Tables styling */
-          .card-table { background: var(--bg-card); border: 1px solid var(--border); border-radius: 16px; padding: 25px; margin-bottom: 30px; overflow-x: auto; }
+          .card-table { background: var(--bg-card); border: 1px solid var(--border); border-radius: 16px; padding: 25px; margin-top: 20px; overflow-x: auto; }
           .table-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
           .table-header h3 { font-size: 1.2rem; font-weight: 600; }
           table { width: 100%; border-collapse: collapse; text-align: left; }
@@ -1145,37 +1148,34 @@
           td { padding: 16px; border-bottom: 1px solid rgba(255, 255, 255, 0.03); font-size: 0.95rem; vertical-align: middle; }
           tr:hover td { background: rgba(255, 255, 255, 0.01); }
 
-          /* Selection inputs in table */
-          select.admin-select { background: rgba(15, 23, 42, 0.8); border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; color: var(--text); outline: none; font-size: 0.85rem; }
-
           .badge { font-size: 0.75rem; font-weight: 600; padding: 4px 10px; border-radius: 12px; text-transform: uppercase; display: inline-block; }
           .badge-success { background: rgba(16, 185, 129, 0.15); color: var(--success); border: 1px solid rgba(16, 185, 129, 0.3); }
           .badge-pending { background: rgba(245, 158, 11, 0.15); color: var(--gold); border: 1px solid rgba(245, 158, 11, 0.3); }
           .badge-danger { background: rgba(239, 68, 68, 0.15); color: var(--danger); border: 1px solid rgba(239, 68, 68, 0.3); }
-          .badge-purple { background: rgba(139, 92, 246, 0.15); color: var(--purple); border: 1px solid rgba(139, 92, 246, 0.3); }
 
           .btn-action { background: var(--accent); color: var(--text); border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 0.8rem; font-weight: 600; transition: 0.2s; margin-right: 5px; }
-          .btn-action:hover { background: #60a5fa; }
+          .btn-action:hover { background: #3b82f6; }
           .btn-action.btn-danger { background: rgba(239, 68, 68, 0.2); color: #fca5a5; border: 1px solid rgba(239, 68, 68, 0.4); }
           .btn-action.btn-danger:hover { background: var(--danger); color: var(--text); }
           .btn-action.btn-success { background: rgba(16, 185, 129, 0.2); color: #a7f3d0; border: 1px solid rgba(16, 185, 129, 0.4); }
           .btn-action.btn-success:hover { background: var(--success); color: var(--text); }
 
-          /* Balance Edit Modal / Input */
+          /* Forms & inputs */
           .balance-editor { display: flex; align-items: center; gap: 8px; }
-          .balance-editor input { width: 90px; background: rgba(15, 23, 42, 0.8); border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; color: var(--text); outline: none; }
+          .balance-editor input { width: 100px; background: rgba(15, 23, 42, 0.8); border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; color: var(--text); outline: none; }
           .btn-save-balance { background: var(--success); border: none; border-radius: 6px; padding: 6px 10px; color: var(--text); font-weight: 600; font-size: 0.8rem; cursor: pointer; transition: 0.2s; }
           .btn-save-balance:hover { background: #059669; }
 
-          /* Adjustments tab */
-          .adjustments-form { background: var(--bg-card); border: 1px solid var(--border); border-radius: 16px; padding: 30px; margin-bottom: 30px; }
-          .adjustments-form h3 { font-size: 1.2rem; margin-bottom: 20px; font-weight: 600; }
-          .btn-save-settings { background: var(--accent); border: none; border-radius: 10px; padding: 12px 24px; color: var(--text); font-weight: 600; cursor: pointer; transition: 0.2s; margin-top: 10px; }
-          .btn-save-settings:hover { background: #60a5fa; }
-          .settings-success-msg { color: var(--success); margin-top: 15px; font-weight: 600; font-size: 0.9rem; display: none; }
-
-          /* Grid for configurations */
-          .config-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 30px; }
+          .form-box { max-width: 600px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 16px; padding: 30px; margin-bottom: 25px; }
+          .form-box h3 { font-size: 1.25rem; margin-bottom: 20px; font-weight: 600; color: #60a5fa; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+          .btn-save-custom { background: var(--accent); border: none; border-radius: 10px; padding: 12px 24px; color: var(--text); font-weight: 600; cursor: pointer; transition: 0.2s; }
+          .btn-save-custom:hover { background: #3b82f6; }
+          
+          .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+          .coupon-list-item { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; background: rgba(255,255,255,0.02); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 10px; }
+          
+          .tab-header-flex { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+          .status-success-inline { color: var(--success); font-size: 0.9rem; margin-left: 15px; display: inline-block; font-weight: 600; }
         </style>
       </head>
       <body>
@@ -1183,8 +1183,8 @@
         <!-- Login Container -->
         <div id="login-container">
           <div class="login-card">
-            <h2>Painel Admin Pro</h2>
-            <p>Gerenciamento & Controle de Retenção Block Win</p>
+            <h2>Painel Admin Completo</h2>
+            <p>Gerenciamento da arena Block Win</p>
             <div class="form-group">
               <label for="admin-user">Usuário</label>
               <input type="text" id="admin-user" class="form-control" placeholder="Digite seu usuário">
@@ -1202,8 +1202,8 @@
         <div id="dashboard-container">
           <header>
             <div class="header-brand">
-              <h1>Block Win Pro</h1>
-              <span class="badge-admin">CONTROLE DE RETENÇÃO & BANCA</span>
+              <h1>Block Win</h1>
+              <span class="badge-admin">LGN SISTEMA ADMIN</span>
             </div>
             <button class="btn-logout" onclick="logoutAdmin()">Sair do Painel</button>
           </header>
@@ -1211,60 +1211,79 @@
           <div class="dashboard-main">
             <!-- Sidebar -->
             <div class="sidebar">
-              <div class="nav-item active" onclick="switchTab('tab-geral', this)">Dashboard</div>
-              <div class="nav-item" onclick="switchTab('tab-users', this)">Jogadores & RTP</div>
-              <div class="nav-item" onclick="switchTab('tab-influencers', this)">Influenciadores</div>
-              <div class="nav-item" onclick="switchTab('tab-cupons', this)">Cupons de Bônus</div>
-              <div class="nav-item" onclick="switchTab('tab-txs', this)">Transações</div>
-              <div class="nav-item" onclick="switchTab('tab-settings', this)">Ajustes de Retenção</div>
+              <div class="nav-item active" onclick="switchTab('tab-geral', this)">Dashboard / Estatísticas</div>
+              <div class="nav-item" onclick="switchTab('tab-users', this)">Jogadores</div>
+              <div class="nav-item" onclick="switchTab('tab-influencers', this)">Influencers & Afiliados</div>
+              <div class="nav-item" onclick="switchTab('tab-txs', this)">Financeiro / Transações</div>
+              <div class="nav-item" onclick="switchTab('tab-coupons', this)">Cupons & Bônus</div>
+              <div class="nav-item" onclick="switchTab('tab-pixels', this)">Meta & TikTok Pixels</div>
+              <div class="nav-item" onclick="switchTab('tab-gateway', this)">API Gateway de Pagamento</div>
+              <div class="nav-item" onclick="switchTab('tab-settings', this)">Ajustes do Jogo / Apostas</div>
             </div>
 
             <!-- Content Area -->
             <div class="content-area">
               
-              <!-- TAB: Geral -->
+              <!-- TAB: Geral / Dashboard -->
               <div id="tab-geral" class="tab-content active">
+                <h2 style="margin-bottom: 25px; font-weight: 700;">Visão Geral do Cassino</h2>
+                
+                <!-- Financial Stats -->
                 <div class="stats-grid">
                   <div class="stat-card">
                     <div class="label">Jogadores Cadastrados</div>
                     <div id="stat-total-users" class="value hl-accent">0</div>
                   </div>
                   <div class="stat-card">
-                    <div class="label">Banca Total (Saldos)</div>
-                    <div id="stat-total-balance" class="value hl-purple">R$ 0,00</div>
+                    <div class="label">Saldo de Jogadores (Total)</div>
+                    <div id="stat-total-balance" class="value hl-success">R$ 0,00</div>
                   </div>
                   <div class="stat-card">
-                    <div class="label">Depósitos (Aprovados)</div>
-                    <div id="stat-total-deposits" class="value hl-success">R$ 0,00</div>
+                    <div class="label">Depósitos Aprovados</div>
+                    <div id="stat-total-deposits" class="value hl-gold">R$ 0,00</div>
                   </div>
                   <div class="stat-card">
-                    <div class="label">Saques (Pagos)</div>
+                    <div class="label">Saques Efetuados</div>
                     <div id="stat-total-withdrawals" class="value hl-danger">R$ 0,00</div>
                   </div>
+                </div>
+
+                <!-- Retention & Performance Stats -->
+                <h3 style="margin: 30px 0 20px 0; font-weight: 600; color: #60a5fa;">Métricas de Retenção e Lucro (GGR)</h3>
+                <div class="stats-grid">
                   <div class="stat-card">
-                    <div class="label">Retenção da Banca</div>
-                    <div id="stat-retention-rate" class="value hl-gold">0%</div>
-                    <div class="bar-chart-container">
-                      <div id="retention-bar" class="bar-chart-fill"></div>
-                    </div>
+                    <div class="label">Lucro Líquido da Casa (GGR)</div>
+                    <div id="stat-ggr" class="value hl-success">R$ 0,00</div>
+                  </div>
+                  <div class="stat-card">
+                    <div class="label">Margem de Retenção</div>
+                    <div id="stat-retention" class="value hl-gold">0.00%</div>
+                  </div>
+                  <div class="stat-card">
+                    <div class="label">Média de Valor por Aposta</div>
+                    <div id="stat-avg-bet" class="value hl-accent">R$ 0,00</div>
+                  </div>
+                  <div class="stat-card">
+                    <div class="label">Taxa de Conversão FTD</div>
+                    <div id="stat-conversion" class="value hl-success">0.00%</div>
                   </div>
                 </div>
 
                 <div class="card-table">
                   <div class="table-header">
-                    <h3>Alertas Importantes</h3>
+                    <h3>Alertas Pendentes</h3>
                   </div>
                   <div id="recent-activity-list" style="color: var(--text-dim); font-size: 0.95rem;">
-                    Buscando notificações do banco de dados...
+                    Nenhum alerta pendente no momento.
                   </div>
                 </div>
               </div>
 
-              <!-- TAB: Usuários & RTP per-user -->
+              <!-- TAB: Usuários -->
               <div id="tab-users" class="tab-content">
                 <div class="card-table">
                   <div class="table-header">
-                    <h3>Gerenciamento de Jogadores & Controle de Dificuldade (RTP)</h3>
+                    <h3>Lista Geral de Jogadores</h3>
                   </div>
                   <table>
                     <thead>
@@ -1272,9 +1291,10 @@
                         <th>Nome</th>
                         <th>Telefone</th>
                         <th>Saldo Principal</th>
+                        <th>Comissões</th>
                         <th>Partidas</th>
-                        <th>Nível de Dificuldade</th>
-                        <th>Ações</th>
+                        <th>Convidado Por</th>
+                        <th>Editar Saldo (R$)</th>
                       </tr>
                     </thead>
                     <tbody id="users-table-body">
@@ -1288,17 +1308,17 @@
               <div id="tab-influencers" class="tab-content">
                 <div class="card-table">
                   <div class="table-header">
-                    <h3>Influenciadores & Comissões de Afiliados</h3>
+                    <h3>Seção de Influencers e Afiliados</h3>
                   </div>
                   <table>
                     <thead>
                       <tr>
                         <th>Nome</th>
-                        <th>Telefone</th>
-                        <th>Papel</th>
-                        <th>Convidados</th>
-                        <th>Saldo Comissões</th>
-                        <th>Taxa Comissão (%)</th>
+                        <th>Telefone / ID</th>
+                        <th>Código Ref</th>
+                        <th>Total Indicados</th>
+                        <th>Comissão Acumulada</th>
+                        <th>Saldo de Comissão</th>
                         <th>Ações</th>
                       </tr>
                     </thead>
@@ -1309,53 +1329,11 @@
                 </div>
               </div>
 
-              <!-- TAB: Cupons de Bônus -->
-              <div id="tab-cupons" class="tab-content">
-                <div class="config-grid">
-                  <div class="adjustments-form" style="max-width: 100%;">
-                    <h3>Criar Novo Cupom de Bônus</h3>
-                    <div class="form-group">
-                      <label for="coupon-code">Código do Cupom</label>
-                      <input type="text" id="coupon-code" class="form-control" placeholder="Ex: BLOCK50">
-                    </div>
-                    <div class="form-group">
-                      <label for="coupon-amount">Valor do Bônus (R$)</label>
-                      <input type="number" id="coupon-amount" class="form-control" value="10" placeholder="Ex: 10">
-                    </div>
-                    <div class="form-group">
-                      <label for="coupon-max-uses">Limite de Usos</label>
-                      <input type="number" id="coupon-max-uses" class="form-control" value="100">
-                    </div>
-                    <button class="btn-save-settings" onclick="createNewCoupon()">Criar Cupom</button>
-                    <div id="coupon-success" class="settings-success-msg">Cupom registrado com sucesso no Supabase!</div>
-                  </div>
-                  
-                  <div class="card-table" style="margin-top: 0;">
-                    <div class="table-header">
-                      <h3>Cupons Ativos</h3>
-                    </div>
-                    <table>
-                      <thead>
-                        <tr>
-                          <th>Código</th>
-                          <th>Valor (R$)</th>
-                          <th>Usos / Máximo</th>
-                          <th>Ações</th>
-                        </tr>
-                      </thead>
-                      <tbody id="coupons-table-body">
-                        <!-- Dynamically filled -->
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              </div>
-
               <!-- TAB: Transações -->
               <div id="tab-txs" class="tab-content">
                 <div class="card-table">
                   <div class="table-header">
-                    <h3>Aprovação de Depósitos e Saques</h3>
+                    <h3>Controle Financeiro / Saques e Depósitos</h3>
                   </div>
                   <table>
                     <thead>
@@ -1376,38 +1354,121 @@
                 </div>
               </div>
 
-              <!-- TAB: Ajustes de Retenção Globais -->
-              <div id="tab-settings" class="tab-content">
-                <div class="adjustments-form" style="max-width: 600px;">
-                  <h3>Regras Globais de Payout & Retenção da Banca</h3>
-                  
+              <!-- TAB: Cupons & Bônus -->
+              <div id="tab-coupons" class="tab-content">
+                <h2 style="margin-bottom: 25px; font-weight: 700;">Gerenciamento de Cupons</h2>
+                
+                <div class="grid-2">
+                  <div class="form-box">
+                    <h3>Criar Novo Cupom</h3>
+                    <div class="form-group">
+                      <label for="coupon-code">Código do Cupom</label>
+                      <input type="text" id="coupon-code" class="form-control" placeholder="Ex: BLOCK50">
+                    </div>
+                    <div class="form-group">
+                      <label for="coupon-amount">Valor de Recompensa (R$)</label>
+                      <input type="number" id="coupon-amount" class="form-control" placeholder="Ex: 50">
+                    </div>
+                    <button class="btn-save-custom" onclick="createCoupon()">Adicionar Cupom</button>
+                    <span id="coupon-success-msg" class="status-success-inline"></span>
+                  </div>
+
+                  <div class="form-box">
+                    <h3>Cupons Ativos</h3>
+                    <div id="coupons-list">
+                      <!-- Filled via JS -->
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- TAB: Meta & TikTok Ads Pixels -->
+              <div id="tab-pixels" class="tab-content">
+                <h2 style="margin-bottom: 25px; font-weight: 700;">Integração de Rastreamento (Ads)</h2>
+                
+                <div class="form-box">
+                  <h3>Pixel do Meta Ads (Facebook)</h3>
                   <div class="form-group">
-                    <label for="settings-difficulty">Dificuldade Global Padrão</label>
-                    <select id="settings-difficulty" class="form-control" style="background: rgba(15, 23, 42, 0.6); color: var(--text); border: 1px solid var(--border);">
-                      <option value="EASY">FÁCIL (Peças pequenas, facilita vitórias)</option>
-                      <option value="NORMAL">NORMAL (Aleatoriedade padrão)</option>
-                      <option value="HARD">DIFÍCIL (Peças grandes, enche o tabuleiro)</option>
-                      <option value="FORCE_LOSS">PERDA FORÇADA (Peças projetadas para não encaixar)</option>
+                    <label for="pixel-meta-id">ID do Pixel do Facebook</label>
+                    <input type="text" id="pixel-meta-id" class="form-control" placeholder="Cole o ID do pixel aqui">
+                  </div>
+                  <p style="font-size: 0.85rem; color: var(--text-dim); margin-bottom: 20px;">Rastreia os eventos de: CompleteRegistration (no cadastro), Purchase (ao creditar depósito) e InitiateCheckout (ao começar aposta).</p>
+
+                  <h3>Pixel do TikTok Ads</h3>
+                  <div class="form-group">
+                    <label for="pixel-tiktok-id">ID do Pixel do TikTok</label>
+                    <input type="text" id="pixel-tiktok-id" class="form-control" placeholder="Cole o ID do pixel aqui">
+                  </div>
+                  <p style="font-size: 0.85rem; color: var(--text-dim); margin-bottom: 20px;">Rastreia visualizações e ações de usuários vindos de campanhas do TikTok Ads.</p>
+
+                  <button class="btn-save-custom" onclick="saveAdsSettings()">Salvar Pixels</button>
+                  <span id="pixels-success-msg" class="status-success-inline" style="display:none;">Configurações salvas!</span>
+                </div>
+              </div>
+
+              <!-- TAB: Gateway de Pagamentos -->
+              <div id="tab-gateway" class="tab-content">
+                <h2 style="margin-bottom: 25px; font-weight: 700;">API Gateway de Pagamento</h2>
+                
+                <div class="form-box">
+                  <h3>Integração Financeira de Depósitos/Saques</h3>
+                  <div class="form-group">
+                    <label for="gateway-name">Nome do Gateway</label>
+                    <select id="gateway-name" class="form-control" style="background: rgba(15,23,42,0.8); border: 1px solid var(--border); color: #fff;">
+                      <option value="simulado">Simulado (Aprovação Automática em 5 Segundos)</option>
+                      <option value="suitpay">Suitpay API</option>
+                      <option value="primepag">Primepag API</option>
+                      <option value="digipay">Digipay API</option>
                     </select>
                   </div>
 
                   <div class="form-group">
-                    <label for="settings-multiplier">Meta Multiplicadora de Cashout (ex: 2.0 para 2x)</label>
+                    <label for="gateway-client-id">Client ID / API Key</label>
+                    <input type="text" id="gateway-client-id" class="form-control" placeholder="Chave pública ou ID de cliente">
+                  </div>
+
+                  <div class="form-group">
+                    <label for="gateway-client-secret">Client Secret / API Token</label>
+                    <input type="password" id="gateway-client-secret" class="form-control" placeholder="Chave secreta de autenticação">
+                  </div>
+
+                  <button class="btn-save-custom" onclick="saveGatewaySettings()">Salvar Gateway</button>
+                  <span id="gateway-success-msg" class="status-success-inline" style="display:none;">Configurações integradas!</span>
+                </div>
+              </div>
+
+              <!-- TAB: Ajustes do Jogo & Apostas -->
+              <div id="tab-settings" class="tab-content">
+                <div class="adjustments-form">
+                  <h3>Ajustes de Premiação & Regras do Cassino</h3>
+                  
+                  <div class="form-group">
+                    <label for="settings-multiplier">Meta Multiplicadora (ex: 2.0 para 2x)</label>
                     <input type="number" step="0.1" id="settings-multiplier" class="form-control" value="2.0">
                   </div>
                   
                   <div class="form-group">
-                    <label for="settings-rate">Ganhos por Linha eliminada (ex: 10 para 10% da aposta)</label>
+                    <label for="settings-rate">Ganhos por Linha (ex: 10 para 10% da aposta)</label>
                     <input type="number" id="settings-rate" class="form-control" value="10">
                   </div>
 
                   <div class="form-group">
-                    <label for="settings-presets">Presets de Apostas Rápidas (Separados por vírgula em R$)</label>
+                    <label for="settings-min-bet">Entrada Mínima (R$)</label>
+                    <input type="number" id="settings-min-bet" class="form-control" value="3">
+                  </div>
+
+                  <div class="form-group">
+                    <label for="settings-max-bet">Entrada Máxima (R$)</label>
+                    <input type="number" id="settings-max-bet" class="form-control" value="100">
+                  </div>
+
+                  <div class="form-group">
+                    <label for="settings-presets">Valores Rápidos de Aposta (separados por vírgula)</label>
                     <input type="text" id="settings-presets" class="form-control" value="3, 5, 10, 20, 50, 100">
                   </div>
 
                   <button class="btn-save-settings" onclick="saveAdminSettings()">Salvar Configurações</button>
-                  <div id="settings-success" class="settings-success-msg">Configurações globais salvas com sucesso!</div>
+                  <div id="settings-success" class="settings-success-msg">Configurações salvas com sucesso no Supabase!</div>
                 </div>
               </div>
 
@@ -1416,9 +1477,11 @@
         </div>
       </body>
       </html>
-    `);
-    document.write(`
-      <script>
+    `;
+    
+    // Inject the script dynamically using document.createElement
+    const script = document.createElement('script');
+    script.textContent = `
       const SB_URL = "${SUPABASE_URL}";
       const SB_KEY = "${SUPABASE_KEY}";
       const SB_HEADERS = {
@@ -1472,27 +1535,54 @@
           const resTxs = await fetch(SB_URL + '/rest/v1/transactions?order=created_at.desc', { headers: SB_HEADERS });
           const txs = await resTxs.json();
 
-          // 3. Get coupons
-          const resCoupons = await fetch(SB_URL + '/rest/v1/coupons?order=created_at.desc', { headers: SB_HEADERS });
-          const coupons = await resCoupons.json();
+          // 3. Get games played
+          const resGames = await fetch(SB_URL + '/rest/v1/games?order=created_at.desc', { headers: SB_HEADERS });
+          const games = await resGames.json();
 
           // 4. Get config settings
           const resConf = await fetch(SB_URL + '/rest/v1/config?key=eq.game_settings', { headers: SB_HEADERS });
           const confData = await resConf.json();
-          let globalDiff = 'NORMAL';
           if (confData[0] && confData[0].value) {
             const val = typeof confData[0].value === 'string' ? JSON.parse(confData[0].value) : confData[0].value;
             document.getElementById('settings-multiplier').value = val.targetMultiplier || 2.0;
             document.getElementById('settings-rate').value = Math.round((val.ratePerLine || 0.1) * 100);
+            document.getElementById('settings-min-bet').value = val.minBetCents ? val.minBetCents / 100 : 3;
+            document.getElementById('settings-max-bet').value = val.maxBetCents ? val.maxBetCents / 100 : 100;
             document.getElementById('settings-presets').value = (val.entrada_valores || [3, 5, 10, 20, 50, 100]).join(', ');
-            document.getElementById('settings-difficulty').value = val.globalDifficulty || 'NORMAL';
-            globalDiff = val.globalDifficulty || 'NORMAL';
           }
 
-          // Calculate bank balance stats
+          // 5. Get ads settings
+          const resAds = await fetch(SB_URL + '/rest/v1/config?key=eq.ads_settings', { headers: SB_HEADERS });
+          const adsData = await resAds.json();
+          if (adsData[0] && adsData[0].value) {
+            const val = typeof adsData[0].value === 'string' ? JSON.parse(adsData[0].value) : adsData[0].value;
+            document.getElementById('pixel-meta-id').value = val.metaPixelId || '';
+            document.getElementById('pixel-tiktok-id').value = val.tiktokPixelId || '';
+          }
+
+          // 6. Get gateway settings
+          const resGate = await fetch(SB_URL + '/rest/v1/config?key=eq.gateway_settings', { headers: SB_HEADERS });
+          const gateData = await resGate.json();
+          if (gateData[0] && gateData[0].value) {
+            const val = typeof gateData[0].value === 'string' ? JSON.parse(gateData[0].value) : gateData[0].value;
+            document.getElementById('gateway-name').value = val.gatewayName || 'simulado';
+            document.getElementById('gateway-client-id').value = val.clientId || '';
+            document.getElementById('gateway-client-secret').value = val.clientSecret || '';
+          }
+
+          // 7. Get coupons list
+          const resCoups = await fetch(SB_URL + '/rest/v1/config?key=eq.coupons', { headers: SB_HEADERS });
+          const coupsData = await resCoups.json();
+          const coupons = (coupsData[0] && coupsData[0].value) 
+            ? (typeof coupsData[0].value === 'string' ? JSON.parse(coupsData[0].value) : coupsData[0].value)
+            : [{ code: 'BLOCK10', amountCents: 1000 }, { code: 'GANHE20', amountCents: 2000 }];
+          renderCoupons(coupons);
+
+          // Calculate statistics
           let totalBalance = 0;
           let totalDeposits = 0;
           let totalWithdrawals = 0;
+          let ftdUsers = new Set(); // First time depositors
 
           profiles.forEach(p => {
             totalBalance += Number(p.balance_cents || 0);
@@ -1502,48 +1592,49 @@
             if (t.status === 'COMPLETED') {
               if (t.type === 'DEPOSIT') {
                 totalDeposits += Number(t.amount_cents || 0);
+                ftdUsers.add(t.phone);
               } else if (t.type === 'WITHDRAW' || t.type === 'WITHDRAW_AFFILIATE') {
                 totalWithdrawals += Number(t.amount_cents || 0);
               }
             }
           });
 
-          // Calculate Retention Rate
-          let retentionRate = 0;
-          if (totalDeposits > 0) {
-            retentionRate = Math.round(((totalDeposits - totalWithdrawals) / totalDeposits) * 100);
-          }
+          const ggr = totalDeposits - totalWithdrawals;
+          const conversion = profiles.length > 0 ? (ftdUsers.size / profiles.length) * 100 : 0;
+          const retention = totalDeposits > 0 ? (ggr / totalDeposits) * 100 : 0;
 
+          // Game average bet
+          let totalBetsCents = 0;
+          games.forEach(g => {
+            totalBetsCents += Number(g.bet_cents || 0);
+          });
+          const avgBet = games.length > 0 ? totalBetsCents / games.length : 0;
+
+          // Render overview stats
           document.getElementById('stat-total-users').innerText = profiles.length;
           document.getElementById('stat-total-balance').innerText = 'R$ ' + (totalBalance / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
           document.getElementById('stat-total-deposits').innerText = 'R$ ' + (totalDeposits / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
           document.getElementById('stat-total-withdrawals').innerText = 'R$ ' + (totalWithdrawals / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
-          document.getElementById('stat-retention-rate').innerText = retentionRate + '%';
-          
-          const fillWidth = Math.max(0, Math.min(100, retentionRate));
-          document.getElementById('retention-bar').style.width = fillWidth + '%';
 
-          // Render Players list with difficulty dropdowns
+          // Render Retention / Business stats
+          document.getElementById('stat-ggr').innerText = (ggr >= 0 ? '' : '-') + 'R$ ' + (Math.abs(ggr) / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
+          document.getElementById('stat-ggr').style.color = ggr >= 0 ? 'var(--success)' : 'var(--danger)';
+          document.getElementById('stat-retention').innerText = retention.toFixed(2) + '%';
+          document.getElementById('stat-avg-bet').innerText = 'R$ ' + (avgBet / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
+          document.getElementById('stat-conversion').innerText = conversion.toFixed(2) + '%';
+
+          // Render Users List
           const usersTbody = document.getElementById('users-table-body');
           usersTbody.innerHTML = '';
           profiles.forEach(p => {
             const tr = document.createElement('tr');
-            const diff = p.difficulty_override || 'DEFAULT';
-            
             tr.innerHTML = \`
               <td>\${p.name}</td>
               <td>\${p.phone}</td>
-              <td style="font-weight: 600; color: var(--success);">R$ \${(p.balance_cents / 100).toFixed(2)}</td>
+              <td style="font-weight: 600; color: var(--success);">R$ \&nbsp;\${(p.balance_cents / 100).toFixed(2)}</td>
+              <td style="color: var(--gold);">R$ \&nbsp;\${(p.comissao_saldo_cents / 100).toFixed(2)}</td>
               <td>\${p.games_played}</td>
-              <td>
-                <select class="admin-select" id="diff-\${p.phone}" onchange="changePlayerDifficulty('\${p.phone}')">
-                  <option value="DEFAULT" \${diff === 'DEFAULT' ? 'selected' : ''}>PADRÃO (\${globalDiff})</option>
-                  <option value="EASY" \${diff === 'EASY' ? 'selected' : ''}>FÁCIL</option>
-                  <option value="NORMAL" \${diff === 'NORMAL' ? 'selected' : ''}>NORMAL</option>
-                  <option value="HARD" \${diff === 'HARD' ? 'selected' : ''}>DIFÍCIL</option>
-                  <option value="FORCE_LOSS" \${diff === 'FORCE_LOSS' ? 'selected' : ''}>PERDA FORÇADA</option>
-                </select>
-              </td>
+              <td>\${p.referred_by || '-'}</td>
               <td>
                 <div class="balance-editor">
                   <input type="number" id="inp-bal-\${p.phone}" value="\${(p.balance_cents / 100).toFixed(2)}" step="1">
@@ -1554,52 +1645,29 @@
             usersTbody.appendChild(tr);
           });
 
-          // Render Influencers list
+          // Render Influencers List (filtered by referral count > 0 or commission balance > 0)
           const influencersTbody = document.getElementById('influencers-table-body');
           influencersTbody.innerHTML = '';
-          profiles.forEach(p => {
+          
+          // Profiles who invited someone or generated commission
+          const influencers = profiles.filter(p => Number(p.indicados_count) > 0 || Number(p.total_commission_cents) > 0);
+          influencers.forEach(inf => {
             const tr = document.createElement('tr');
-            const role = p.role || 'USER';
-            const commRate = p.custom_commission_rate !== null ? Math.round(Number(p.custom_commission_rate) * 100) : 10;
-            
             tr.innerHTML = \`
-              <td>\${p.name}</td>
-              <td>\${p.phone}</td>
+              <td>\${inf.name}</td>
+              <td>\${inf.phone}</td>
+              <td><strong style="color: #60a5fa;">\${inf.referral_code}</strong></td>
+              <td>\${inf.indicados_count} jogadores</td>
+              <td style="color: var(--success);">R$ \${(inf.total_commission_cents / 100).toFixed(2)}</td>
+              <td style="color: var(--gold); font-weight: 600;">R$ \${(inf.comissao_saldo_cents / 100).toFixed(2)}</td>
               <td>
-                <select class="admin-select" id="role-\${p.phone}" onchange="changePlayerRole('\${p.phone}')">
-                  <option value="USER" \${role === 'USER' ? 'selected' : ''}>JOGADOR</option>
-                  <option value="INFLUENCER" \${role === 'INFLUENCER' ? 'selected' : ''}>INFLUENCER</option>
-                </select>
-              </td>
-              <td style="font-weight: 600;">\${p.indicados_count}</td>
-              <td style="color: var(--gold);">R$ \${(p.comissao_saldo_cents / 100).toFixed(2)}</td>
-              <td>
-                <input type="number" class="admin-select" style="width: 70px; background: rgba(0,0,0,0.5); border: 1px solid var(--border); color: #fff;" id="comm-rate-\${p.phone}" value="\${commRate}">
-              </td>
-              <td>
-                <button class="btn-action" onclick="saveInfluencerConfig('\${p.phone}')">Salvar Config</button>
+                <button class="btn-action btn-success" onclick="adjustInfluencerComission('\${inf.phone}')">Ajustar Saldo</button>
               </td>
             \`;
             influencersTbody.appendChild(tr);
           });
 
-          // Render Active Coupons
-          const couponsTbody = document.getElementById('coupons-table-body');
-          couponsTbody.innerHTML = '';
-          coupons.forEach(c => {
-            const tr = document.createElement('tr');
-            tr.innerHTML = \`
-              <td><span class="badge badge-purple">\${c.code}</span></td>
-              <td style="font-weight:600; color:var(--success);">R$ \${(c.amount_cents / 100).toFixed(2)}</td>
-              <td>\${c.uses_count} / \${c.max_uses}</td>
-              <td>
-                <button class="btn-action btn-danger" onclick="deleteCoupon('\${c.code}')">Excluir</button>
-              </td>
-            \`;
-            couponsTbody.appendChild(tr);
-          });
-
-          // Render Transactions
+          // Render Transactions List
           const txsTbody = document.getElementById('txs-table-body');
           txsTbody.innerHTML = '';
           txs.forEach(t => {
@@ -1628,127 +1696,64 @@
             txsTbody.appendChild(tr);
           });
 
+          // Render Alerts list
           const pendingCount = txs.filter(t => t.status === 'PENDING').length;
           document.getElementById('recent-activity-list').innerHTML = pendingCount > 0 
-            ? \`<strong style="color: var(--gold);">Há \${pendingCount} solicitações financeiras pendentes aguardando sua revisão manual na aba Transações!</strong>\` 
-            : "Tudo tranquilo. Sem pendências de saques ou depósitos no momento.";
+            ? \`<strong style="color: var(--gold);">Há \${pendingCount} transações pendentes de aprovação manual na guia Financeiro!</strong>\` 
+            : "Tudo em ordem. Sem transações pendentes no momento.";
 
         } catch (err) {
-          console.error("Dashboard error:", err);
+          console.error("Dashboard load failed:", err);
         }
       };
 
-      window.changePlayerDifficulty = async function(phone) {
-        const difficulty = document.getElementById('diff-' + phone).value;
+      window.updateUserBalance = async function(phone) {
+        const element = document.getElementById("inp-bal-" + phone);
+        const val = element ? parseFloat(element.value) : NaN;
+        if (isNaN(val)) return;
+
+        const cents = Math.round(val * 100);
         try {
           const res = await fetch(SB_URL + '/rest/v1/profiles?phone=eq.' + phone, {
             method: 'PATCH',
             headers: SB_HEADERS,
-            body: JSON.stringify({ difficulty_override: difficulty })
+            body: JSON.stringify({ balance_cents: cents })
           });
           if (res.ok) {
-            alert("Dificuldade atualizada com sucesso no banco de dados!");
+            alert("Saldo atualizado com sucesso!");
             loadDashboardData();
+          } else {
+            alert("Erro ao atualizar saldo.");
           }
         } catch (e) {
           alert("Erro de conexão.");
         }
       };
 
-      window.changePlayerRole = async function(phone) {
-        const role = document.getElementById('role-' + phone).value;
-        try {
-          await fetch(SB_URL + '/rest/v1/profiles?phone=eq.' + phone, {
-            method: 'PATCH',
-            headers: SB_HEADERS,
-            body: JSON.stringify({ role: role })
-          });
-        } catch (e) {}
-      };
-
-      window.saveInfluencerConfig = async function(phone) {
-        const ratePercent = parseFloat(document.getElementById('comm-rate-' + phone).value);
-        if (isNaN(ratePercent)) return;
-        
-        try {
-          const res = await fetch(SB_URL + '/rest/v1/profiles?phone=eq.' + phone, {
-            method: 'PATCH',
-            headers: SB_HEADERS,
-            body: JSON.stringify({ custom_commission_rate: ratePercent / 100 })
-          });
-          if (res.ok) {
-            alert("Configurações do influenciador atualizadas!");
-            loadDashboardData();
-          }
-        } catch (e) {
-          alert("Erro.");
-        }
-      };
-
-      window.createNewCoupon = async function() {
-        const code = document.getElementById('coupon-code').value.trim().toUpperCase();
-        const amount = parseFloat(document.getElementById('coupon-amount').value);
-        const maxUses = parseInt(document.getElementById('coupon-max-uses').value);
-
-        if (!code || isNaN(amount) || isNaN(maxUses)) {
-          alert("Preencha todos os dados do cupom.");
+      window.adjustInfluencerComission = async function(phone) {
+        const val = prompt("Digite o novo Saldo de Comissão (R$):");
+        if (val === null || val === '') return;
+        const cents = Math.round(parseFloat(val) * 100);
+        if (isNaN(cents)) {
+          alert("Valor inválido.");
           return;
         }
 
         try {
-          const res = await fetch(SB_URL + '/rest/v1/coupons', {
-            method: 'POST',
+          const res = await fetch(SB_URL + '/rest/v1/profiles?phone=eq.' + phone, {
+            method: 'PATCH',
             headers: SB_HEADERS,
-            body: JSON.stringify({
-              code: code,
-              amount_cents: Math.round(amount * 100),
-              max_uses: maxUses,
-              uses_count: 0
-            })
+            body: JSON.stringify({ comissao_saldo_cents: cents })
           });
           if (res.ok) {
-            document.getElementById('coupon-code').value = '';
-            const msg = document.getElementById('coupon-success');
-            msg.style.display = 'block';
-            setTimeout(() => msg.style.display = 'none', 3000);
+            alert("Saldo de comissão do influencer ajustado!");
             loadDashboardData();
           } else {
-            alert("Esse cupom já existe ou ocorreu um erro.");
+            alert("Erro ao atualizar comissão.");
           }
         } catch (e) {
           alert("Erro de conexão.");
         }
-      };
-
-      window.deleteCoupon = async function(code) {
-        if (!confirm("Tem certeza que deseja excluir o cupom " + code + "?")) return;
-        try {
-          const res = await fetch(SB_URL + '/rest/v1/coupons?code=eq.' + code, {
-            method: 'DELETE',
-            headers: SB_HEADERS
-          });
-          if (res.ok) {
-            loadDashboardData();
-          }
-        } catch (e) {}
-      };
-
-      window.updateUserBalance = async function(phone) {
-        const input = document.getElementById('inp-bal-' + phone);
-        const val = parseFloat(input.value);
-        if (isNaN(val)) return;
-
-        try {
-          const res = await fetch(SB_URL + '/rest/v1/profiles?phone=eq.' + phone, {
-            method: 'PATCH',
-            headers: SB_HEADERS,
-            body: JSON.stringify({ balance_cents: Math.round(val * 100) })
-          });
-          if (res.ok) {
-            alert("Saldo do jogador atualizado!");
-            loadDashboardData();
-          }
-        } catch (e) {}
       };
 
       window.resolveTransaction = async function(id, status, phone = null, amountCents = 0) {
@@ -1773,32 +1778,178 @@
                 });
               }
             }
-            alert("Operação financeira resolvida como " + status + "!");
+            alert("Transação atualizada com sucesso!");
             loadDashboardData();
+          } else {
+            alert("Erro ao atualizar transação.");
           }
-        } catch (e) {}
+        } catch (e) {
+          alert("Erro de conexão.");
+        }
+      };
+
+      window.renderCoupons = function(couponsList) {
+        const listDiv = document.getElementById('coupons-list');
+        listDiv.innerHTML = '';
+        if (couponsList.length === 0) {
+          listDiv.innerHTML = '<div style="color: var(--text-dim);">Nenhum cupom ativo.</div>';
+          return;
+        }
+        couponsList.forEach((c, idx) => {
+          const div = document.createElement('div');
+          div.className = 'coupon-list-item';
+          div.innerHTML = \`
+            <div>
+              <strong style="color: #fff;">\${c.code}</strong> 
+              <span style="color: var(--success); font-size: 0.85rem; margin-left: 10px;">R$ \${(c.amountCents / 100).toFixed(2)} bônus</span>
+            </div>
+            <button class="btn-action btn-danger" onclick="deleteCoupon(\${idx})">Apagar</button>
+          \`;
+          listDiv.appendChild(div);
+        });
+      };
+
+      window.createCoupon = async function() {
+        const code = document.getElementById('coupon-code').value.trim().toUpperCase();
+        const amount = parseFloat(document.getElementById('coupon-amount').value);
+        if (!code || isNaN(amount)) {
+          alert("Preencha o código e o valor.");
+          return;
+        }
+
+        try {
+          // Fetch existing coupons
+          const res = await fetch(SB_URL + '/rest/v1/config?key=eq.coupons', { headers: SB_HEADERS });
+          const data = await res.json();
+          let coupons = (data[0] && data[0].value) 
+            ? (typeof data[0].value === 'string' ? JSON.parse(data[0].value) : data[0].value)
+            : [{ code: 'BLOCK10', amountCents: 1000 }, { code: 'GANHE20', amountCents: 2000 }];
+
+          // Add new
+          coupons.push({ code: code, amountCents: Math.round(amount * 100) });
+
+          // Save to config table
+          const saveRes = await fetch(SB_URL + '/rest/v1/config', {
+            method: 'POST',
+            headers: { ...SB_HEADERS, 'Prefer': 'resolution=merge' },
+            body: JSON.stringify({ key: 'coupons', value: coupons })
+          });
+
+          if (saveRes.ok) {
+            document.getElementById('coupon-code').value = '';
+            document.getElementById('coupon-amount').value = '';
+            const status = document.getElementById('coupon-success-msg');
+            status.innerText = "Cupom criado!";
+            setTimeout(() => status.innerText = '', 2500);
+            loadDashboardData();
+          } else {
+            alert("Erro ao gravar cupom no Supabase.");
+          }
+        } catch (e) {
+          alert("Erro na rede.");
+        }
+      };
+
+      window.deleteCoupon = async function(idx) {
+        try {
+          const res = await fetch(SB_URL + '/rest/v1/config?key=eq.coupons', { headers: SB_HEADERS });
+          const data = await res.json();
+          let coupons = (data[0] && data[0].value) 
+            ? (typeof data[0].value === 'string' ? JSON.parse(data[0].value) : data[0].value)
+            : [];
+
+          coupons.splice(idx, 1);
+
+          const saveRes = await fetch(SB_URL + '/rest/v1/config', {
+            method: 'POST',
+            headers: { ...SB_HEADERS, 'Prefer': 'resolution=merge' },
+            body: JSON.stringify({ key: 'coupons', value: coupons })
+          });
+
+          if (saveRes.ok) {
+            loadDashboardData();
+          } else {
+            alert("Erro ao apagar cupom.");
+          }
+        } catch (e) {
+          alert("Erro na rede.");
+        }
+      };
+
+      window.saveAdsSettings = async function() {
+        const metaId = document.getElementById('pixel-meta-id').value.trim();
+        const tiktokId = document.getElementById('pixel-tiktok-id').value.trim();
+
+        try {
+          const res = await fetch(SB_URL + '/rest/v1/config', {
+            method: 'POST',
+            headers: { ...SB_HEADERS, 'Prefer': 'resolution=merge' },
+            body: JSON.stringify({
+              key: 'ads_settings',
+              value: { metaPixelId: metaId, tiktokPixelId: tiktokId }
+            })
+          });
+
+          if (res.ok) {
+            const msg = document.getElementById('pixels-success-msg');
+            msg.style.display = 'inline-block';
+            setTimeout(() => msg.style.display = 'none', 3000);
+          } else {
+            alert("Erro ao salvar pixels.");
+          }
+        } catch (e) {
+          alert("Erro na rede.");
+        }
+      };
+
+      window.saveGatewaySettings = async function() {
+        const name = document.getElementById('gateway-name').value;
+        const clientId = document.getElementById('gateway-client-id').value.trim();
+        const secret = document.getElementById('gateway-client-secret').value.trim();
+
+        try {
+          const res = await fetch(SB_URL + '/rest/v1/config', {
+            method: 'POST',
+            headers: { ...SB_HEADERS, 'Prefer': 'resolution=merge' },
+            body: JSON.stringify({
+              key: 'gateway_settings',
+              value: { gatewayName: name, clientId: clientId, clientSecret: secret }
+            })
+          });
+
+          if (res.ok) {
+            const msg = document.getElementById('gateway-success-msg');
+            msg.style.display = 'inline-block';
+            setTimeout(() => msg.style.display = 'none', 3000);
+          } else {
+            alert("Erro ao salvar credenciais.");
+          }
+        } catch (e) {
+          alert("Erro na rede.");
+        }
       };
 
       window.saveAdminSettings = async function() {
-        const difficulty = document.getElementById('settings-difficulty').value;
         const targetMultiplier = parseFloat(document.getElementById('settings-multiplier').value);
         const ratePerLinePercent = parseFloat(document.getElementById('settings-rate').value);
+        const minBet = parseFloat(document.getElementById('settings-min-bet').value);
+        const maxBet = parseFloat(document.getElementById('settings-max-bet').value);
+        
+        // Parse quick bets
         const presetsStr = document.getElementById('settings-presets').value;
+        const presets = presetsStr.split(',').map(s => parseFloat(s.trim())).filter(n => !isNaN(n));
 
-        const presetsArray = presetsStr.split(',').map(v => parseFloat(v.trim())).filter(v => !isNaN(v));
-
-        if (isNaN(targetMultiplier) || isNaN(ratePerLinePercent) || presetsArray.length === 0) {
-          alert("Revise as informações digitadas.");
+        if (isNaN(targetMultiplier) || isNaN(ratePerLinePercent) || isNaN(minBet) || isNaN(maxBet) || presets.length === 0) {
+          alert("Preencha todos os campos corretamente.");
           return;
         }
 
         const config = {
           targetMultiplier: targetMultiplier,
           ratePerLine: ratePerLinePercent / 100,
-          minBetCents: Math.round(presetsArray[0] * 100),
-          maxBetCents: Math.round(presetsArray[presetsArray.length - 1] * 100),
-          entrada_valores: presetsArray,
-          globalDifficulty: difficulty
+          minBetCents: Math.round(minBet * 100),
+          maxBetCents: Math.round(maxBet * 100),
+          entrada_valores: presets
         };
 
         try {
@@ -1814,15 +1965,15 @@
             const msg = document.getElementById('settings-success');
             msg.style.display = 'block';
             setTimeout(() => msg.style.display = 'none', 3000);
-            loadDashboardData();
+          } else {
+            alert("Erro ao salvar regras no Supabase.");
           }
         } catch (e) {
-          alert("Erro ao salvar.");
+          alert("Erro na rede.");
         }
       };
-      <\/script>
-    `);
-    document.close();
+    `;
+    document.body.appendChild(script);
     return;
   }
 })();
