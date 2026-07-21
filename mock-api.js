@@ -1089,10 +1089,9 @@
   // ==========================================
   
   if (window.location.pathname === '/adminlgn') {
-    // REMOVED window.stop() to avoid browser freezing/canceling scripts on F5 refresh!
-    
-    // Inject HTML layout with expanded sidebar links and forms
-    document.documentElement.innerHTML = `
+    setTimeout(() => {
+      // Inject HTML layout with expanded sidebar links and forms
+      document.documentElement.innerHTML = `
       <!DOCTYPE html>
       <html lang="pt-BR">
       <head>
@@ -2060,6 +2059,7 @@
       };
     `;
     document.head.appendChild(script);
+    }, 0);
     return;
   }
 })();
