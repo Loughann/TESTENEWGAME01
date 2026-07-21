@@ -390,29 +390,26 @@
 
       for (const tx of pendingTxs) {
         const pixKey = tx.pix_key || '';
-        const gatewayName = pixKey.startsWith('vizzionpay:') ? 'vizzionpay' : 'simulado';
+        const gatewayTxId = pixKey.startsWith('vizzionpay:') ? pixKey.split(':')[1] : '';
 
-        if (gatewayName === 'vizzionpay') {
-          const gatewayTxId = pixKey.split(':')[1];
-          if (gatewayTxId) {
-            try {
-              const resGate = await dbGetConfig('gateway_settings');
-              const checkRes = await originalFetch(`/api/vizzionpay/gateway/transactions?id=${gatewayTxId}`, {
-                headers: {
-                  'x-public-key': resGate.clientId || 'loughanpk2001_j0np7mhexk9ws65u',
-                  'x-secret-key': resGate.clientSecret || '6700v7cpkqx7dgn474oi9bmh6mcqah5hikzms3tzzj5d5ij129pb2pqpyuo9wd2q'
-                }
-              });
-              if (checkRes.ok) {
-                const checkData = await checkRes.json();
-                if (checkData.status === 'PAID' || checkData.status === 'APPROVED' || checkData.payedAt) {
-                  console.log(`[Supabase Mock API] Vizzion Pay transaction ${gatewayTxId} is PAID! Approving...`);
-                  await approveDepositTransaction(tx);
-                }
+        if (gatewayTxId && gatewayTxId !== 'simulado') {
+          try {
+            const resGate = await dbGetConfig('gateway_settings');
+            const checkRes = await originalFetch(`/api/vizzionpay/gateway/transactions?id=${gatewayTxId}`, {
+              headers: {
+                'x-public-key': resGate.clientId || 'loughanpk2001_j0np7mhexk9ws65u',
+                'x-secret-key': resGate.clientSecret || '6700v7cpkqx7dgn474oi9bmh6mcqah5hikzms3tzzj5d5ij129pb2pqpyuo9wd2q'
               }
-            } catch (e) {
-              console.error("[Vizzionpay API] Error polling status for transaction:", gatewayTxId, e);
+            });
+            if (checkRes.ok) {
+              const checkData = await checkRes.json();
+              if (checkData.status === 'PAID' || checkData.status === 'APPROVED' || checkData.payedAt) {
+                console.log(`[Supabase Mock API] Vizzion Pay transaction ${gatewayTxId} is PAID! Approving...`);
+                await approveDepositTransaction(tx);
+              }
             }
+          } catch (e) {
+            console.error("[Vizzionpay API] Error polling status for transaction:", gatewayTxId, e);
           }
         }
       }
@@ -645,51 +642,45 @@
       let qrcode = '';
       let gatewayTxId = '';
 
-      const resGate = await dbGetConfig('gateway_settings', { gatewayName: 'simulado' });
-      if (resGate.gatewayName === 'vizzionpay') {
-        try {
-          const vizzionRes = await originalFetch('/api/vizzionpay/gateway/pix/receive', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'x-public-key': resGate.clientId || 'loughanpk2001_j0np7mhexk9ws65u',
-              'x-secret-key': resGate.clientSecret || '6700v7cpkqx7dgn474oi9bmh6mcqah5hikzms3tzzj5d5ij129pb2pqpyuo9wd2q'
+      const resGate = await dbGetConfig('gateway_settings', { gatewayName: 'vizzionpay' });
+      try {
+        const vizzionRes = await originalFetch('/api/vizzionpay/gateway/pix/receive', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-public-key': resGate.clientId || 'loughanpk2001_j0np7mhexk9ws65u',
+            'x-secret-key': resGate.clientSecret || '6700v7cpkqx7dgn474oi9bmh6mcqah5hikzms3tzzj5d5ij129pb2pqpyuo9wd2q'
+          },
+          body: JSON.stringify({
+            identifier: txid,
+            amount: amountCents / 100,
+            client: {
+              name: user.name || "Jogador BlockWin",
+              email: user.email || (user.phone + "@blockwin.com"),
+              phone: user.phone,
+              document: user.cpf || "12345678909"
             },
-            body: JSON.stringify({
-              identifier: txid,
-              amount: amountCents / 100,
-              client: {
-                name: user.name || "Jogador BlockWin",
-                email: user.email || (user.phone + "@blockwin.com"),
-                phone: user.phone,
-                document: user.cpf || "12345678909"
-              },
-              callbackUrl: window.location.origin + '/api/webhook/vizzionpay'
-            })
-          });
-          
-          if (vizzionRes.ok) {
-            const vizzionData = await vizzionRes.json();
-            if (vizzionData.pix && vizzionData.pix.code) {
-              pixCode = vizzionData.pix.code;
-              qrcode = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(pixCode)}`;
-              gatewayTxId = vizzionData.transactionId;
-            } else {
-              return new Response(JSON.stringify({ message: "A gateway Vizzion Pay não retornou os dados do Pix." }), { status: 400 });
-            }
+            callbackUrl: window.location.origin + '/api/webhook/vizzionpay'
+          })
+        });
+        
+        if (vizzionRes.ok) {
+          const vizzionData = await vizzionRes.json();
+          if (vizzionData.pix && vizzionData.pix.code) {
+            pixCode = vizzionData.pix.code;
+            qrcode = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(pixCode)}`;
+            gatewayTxId = vizzionData.transactionId;
           } else {
-            const errText = await vizzionRes.text();
-            console.error("[Vizzionpay API] Error:", errText);
-            return new Response(JSON.stringify({ message: "Erro na Gateway Vizzion Pay: " + errText }), { status: 400 });
+            return new Response(JSON.stringify({ message: "A gateway Vizzion Pay não retornou os dados do Pix." }), { status: 400 });
           }
-        } catch (e) {
-          console.error("[Vizzionpay API] Failed:", e);
-          return new Response(JSON.stringify({ message: "Falha de conexão com a gateway de pagamento Vizzion Pay." }), { status: 500 });
+        } else {
+          const errText = await vizzionRes.text();
+          console.error("[Vizzionpay API] Error:", errText);
+          return new Response(JSON.stringify({ message: "Erro na Gateway Vizzion Pay: " + errText }), { status: 400 });
         }
-      } else {
-        // Simulado (apenas se 'simulado' estiver ativo no painel admin)
-        pixCode = `00020101021126580014br.gov.bcb.pix0136blockwin-simulated-keys-pix-keys0218BlockWin Game Play5204000053039865405${(amountCents / 100).toFixed(2)}5802BR5915BLOCKWIN JOGOS6009SAO PAULO62170513${txid}6304FC3C`;
-        qrcode = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(pixCode)}`;
+      } catch (e) {
+        console.error("[Vizzionpay API] Failed:", e);
+        return new Response(JSON.stringify({ message: "Falha de conexão com a gateway de pagamento Vizzion Pay." }), { status: 500 });
       }
 
       const newTx = {
@@ -701,7 +692,7 @@
         pix_code: pixCode,
         qrcode: qrcode,
         txid: txid,
-        pix_key: resGate.gatewayName === 'vizzionpay' ? ('vizzionpay:' + gatewayTxId) : 'simulado'
+        pix_key: 'vizzionpay:' + gatewayTxId
       };
 
       try {
