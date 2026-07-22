@@ -403,8 +403,9 @@
             });
             if (checkRes.ok) {
               const checkData = await checkRes.json();
-              if (checkData.status === 'PAID' || checkData.status === 'APPROVED' || checkData.payedAt) {
-                console.log(`[Supabase Mock API] Vizzion Pay transaction ${gatewayTxId} is PAID! Approving...`);
+              const st = String(checkData.status || '').toUpperCase();
+              if (st === 'PAID' || st === 'APPROVED' || st === 'COMPLETED' || st === 'SUCCESS' || st === 'RECEIVED' || checkData.payedAt || checkData.paidAt) {
+                console.log(`[Supabase Mock API] Vizzion Pay transaction ${gatewayTxId} is PAID (${st})! Approving...`);
                 await approveDepositTransaction(tx);
               }
             }
@@ -607,6 +608,33 @@
     if (urlString === '/api/wallet/' && method === 'GET') {
       if (!user) return new Response(JSON.stringify({ message: "Não autorizado" }), { status: 401 });
       try {
+        const pendingTxs = await dbGetTransactions(user.phone);
+        const resGate = await dbGetConfig('gateway_settings');
+        for (const tx of pendingTxs) {
+          if (tx.type === 'DEPOSIT' && tx.status === 'PENDING') {
+            const pixKey = tx.pix_key || '';
+            const gatewayTxId = pixKey.startsWith('vizzionpay:') ? pixKey.split(':')[1] : '';
+            if (gatewayTxId && gatewayTxId !== 'simulado') {
+              try {
+                const checkRes = await originalFetch(`/api/vizzionpay/gateway/transactions?id=${gatewayTxId}`, {
+                  headers: {
+                    'x-public-key': resGate.clientId || 'loughanpk2001_j0np7mhexk9ws65u',
+                    'x-secret-key': resGate.clientSecret || '6700v7cpkqx7dgn474oi9bmh6mcqah5hikzms3tzzj5d5ij129pb2pqpyuo9wd2q'
+                  }
+                });
+                if (checkRes.ok) {
+                  const checkData = await checkRes.json();
+                  const st = String(checkData.status || '').toUpperCase();
+                  if (st === 'PAID' || st === 'APPROVED' || st === 'COMPLETED' || st === 'SUCCESS' || st === 'RECEIVED' || checkData.payedAt || checkData.paidAt) {
+                    console.log(`[Supabase Mock API] Instant check: Vizzion Pay transaction ${gatewayTxId} is PAID (${st})! Approving...`);
+                    await approveDepositTransaction(tx);
+                  }
+                }
+              } catch (e) {}
+            }
+          }
+        }
+        const updatedUser = await dbGetProfile(user.phone) || user;
         const txs = await dbGetTransactions(user.phone);
         return new Response(JSON.stringify({
           balanceCents: Number(user.balance_cents),
