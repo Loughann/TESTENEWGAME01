@@ -241,7 +241,7 @@
 
   // Session Helper
   async function getLoggedUser() {
-    const phone = (function(){try{return localStorage.getItem('user_session_phone');}catch(e){return null;}})();
+    const phone = localStorage.getItem('user_session_phone');
     if (!phone) return null;
     return await dbGetProfile(phone);
   }
@@ -381,7 +381,7 @@
     }
   }
 
-  // Auto approve deposits in background (Supabase polling with direct Vizzion Pay API)
+  // Auto approve deposits in background (Supabase polling)
   setInterval(async () => {
     try {
       const res = await originalFetch(`${SUPABASE_URL}/rest/v1/transactions?type=eq.DEPOSIT&status=eq.PENDING`, { headers: supabaseHeaders });
@@ -395,22 +395,17 @@
         if (gatewayTxId && gatewayTxId !== 'simulado') {
           try {
             const resGate = await dbGetConfig('gateway_settings');
-            const pubKey = resGate.clientId || 'loughanpk2001_j0np7mhexk9ws65u';
-            const secKey = resGate.clientSecret || '6700v7cpkqx7dgn474oi9bmh6mcqah5hikzms3tzzj5d5ij129pb2pqpyuo9wd2q';
-
-            // Poll directly via Vizzion Pay URL to avoid netlify proxy issues
-            const directUrl = `https://app.vizzionpay.com.br/api/v1/gateway/transactions?id=${gatewayTxId}`;
-            const checkRes = await originalFetch(directUrl, {
+            const checkRes = await originalFetch(`/api/vizzionpay/gateway/transactions?id=${gatewayTxId}`, {
               headers: {
-                'x-public-key': pubKey,
-                'x-secret-key': secKey
+                'x-public-key': resGate.clientId || 'loughanpk2001_j0np7mhexk9ws65u',
+                'x-secret-key': resGate.clientSecret || '6700v7cpkqx7dgn474oi9bmh6mcqah5hikzms3tzzj5d5ij129pb2pqpyuo9wd2q'
               }
             });
             if (checkRes.ok) {
               const checkData = await checkRes.json();
               const st = String(checkData.status || '').toUpperCase();
               if (st === 'PAID' || st === 'APPROVED' || st === 'COMPLETED' || st === 'SUCCESS' || st === 'RECEIVED' || checkData.payedAt || checkData.paidAt) {
-                console.log(`[Supabase Mock API] Vizzion Pay transaction ${gatewayTxId} is PAID (${st})! Approving deposit...`);
+                console.log(`[Supabase Mock API] Vizzion Pay transaction ${gatewayTxId} is PAID (${st})! Approving...`);
                 await approveDepositTransaction(tx);
               }
             }
@@ -420,26 +415,22 @@
         }
       }
     } catch (e) {}
-  }, 2500);
+  }, 3000);
 
   let demoGameSession = null;
 
   // Network Fetch Interceptor
   window.fetch = async function(url, options = {}) {
-    try {
-      let urlString = typeof url === 'string' ? url : (url ? (url.url || String(url)) : '');
-      
-      if (urlString.startsWith('http://') || urlString.startsWith('https://')) {
-        const parsed = new URL(urlString);
-        if (parsed.origin !== window.location.origin) {
-          return originalFetch.apply(window, arguments);
-        }
-        urlString = parsed.pathname;
-      }
+    let urlString = typeof url === 'string' ? url : url.url;
+    
+    if (urlString.startsWith('http://') || urlString.startsWith('https://')) {
+      const parsed = new URL(urlString);
+      urlString = parsed.pathname;
+    }
 
-      if (!urlString || !urlString.startsWith('/api/') || urlString.startsWith('/api/vizzionpay/')) {
-        return originalFetch.apply(window, arguments);
-      }
+    if (!urlString.startsWith('/api/') || urlString.startsWith('/api/vizzionpay/')) {
+      return originalFetch.apply(window, arguments);
+    }
 
     const method = (options.method || 'GET').toUpperCase();
     let body = {};
@@ -506,7 +497,7 @@
         }
 
         await dbCreateProfile(newUser);
-        (function(){try{localStorage.setItem('user_session_phone', cleanPhone);}catch(e){}})();
+        localStorage.setItem('user_session_phone', cleanPhone);
 
         // Tracker Meta Ads/TikTok registration event
         trackEvent('CompleteRegistration');
@@ -534,7 +525,7 @@
           return new Response(JSON.stringify({ message: "Telefone ou senha incorretos." }), { status: 400 });
         }
 
-        (function(){try{localStorage.setItem('user_session_phone', cleanPhone);}catch(e){}})();
+        localStorage.setItem('user_session_phone', cleanPhone);
         return new Response(JSON.stringify({
           user: { name: dbUser.name, phone: dbUser.phone },
           balanceCents: Number(dbUser.balance_cents)
@@ -557,7 +548,7 @@
 
     // Route: Logout
     if (urlString === '/api/auth/logout' && method === 'POST') {
-      (function(){try{localStorage.removeItem('user_session_phone');}catch(e){}})();
+      localStorage.removeItem('user_session_phone');
       return new Response(JSON.stringify({ success: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
 
@@ -1381,9 +1372,5 @@
     }
 
     return new Response(JSON.stringify({ message: "Rota não encontrada no simulador." }), { status: 404, headers: { 'Content-Type': 'application/json' } });
-    } catch (err) {
-      console.error("[Mock API Interceptor Fallback Error]", err);
-      return originalFetch.apply(window, arguments);
-    }
   };
 })();
