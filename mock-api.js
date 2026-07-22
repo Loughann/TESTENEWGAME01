@@ -241,7 +241,7 @@
 
   // Session Helper
   async function getLoggedUser() {
-    const phone = localStorage.getItem('user_session_phone');
+    const phone = (function(){try{return localStorage.getItem('user_session_phone');}catch(e){return null;}})();
     if (!phone) return null;
     return await dbGetProfile(phone);
   }
@@ -506,7 +506,7 @@
         }
 
         await dbCreateProfile(newUser);
-        localStorage.setItem('user_session_phone', cleanPhone);
+        (function(){try{localStorage.setItem('user_session_phone', cleanPhone);}catch(e){}})();
 
         // Tracker Meta Ads/TikTok registration event
         trackEvent('CompleteRegistration');
@@ -534,7 +534,7 @@
           return new Response(JSON.stringify({ message: "Telefone ou senha incorretos." }), { status: 400 });
         }
 
-        localStorage.setItem('user_session_phone', cleanPhone);
+        (function(){try{localStorage.setItem('user_session_phone', cleanPhone);}catch(e){}})();
         return new Response(JSON.stringify({
           user: { name: dbUser.name, phone: dbUser.phone },
           balanceCents: Number(dbUser.balance_cents)
@@ -557,7 +557,7 @@
 
     // Route: Logout
     if (urlString === '/api/auth/logout' && method === 'POST') {
-      localStorage.removeItem('user_session_phone');
+      (function(){try{localStorage.removeItem('user_session_phone');}catch(e){}})();
       return new Response(JSON.stringify({ success: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
 
