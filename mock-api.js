@@ -416,6 +416,8 @@
     } catch (e) {}
   }, 3000);
 
+  let demoGameSession = null;
+
   // Network Fetch Interceptor
   window.fetch = async function(url, options = {}) {
     let urlString = typeof url === 'string' ? url : url.url;
@@ -897,7 +899,9 @@
 
     // Route: Active Game session
     if (urlString === '/api/game/active' && method === 'GET') {
-      if (!user) return new Response(JSON.stringify({ message: "Não autorizado" }), { status: 401 });
+      if (!user) {
+        return new Response(JSON.stringify({ session: demoGameSession || null }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
       try {
         const activeGame = await dbGetActiveGame(user.phone);
         if (activeGame) {
@@ -916,7 +920,33 @@
 
     // Route: Start Game
     if (urlString === '/api/game/start' && method === 'POST') {
-      if (!user) return new Response(JSON.stringify({ message: "Não autorizado" }), { status: 401 });
+      if (!user) {
+        const betCents = (body && body.betCents) ? body.betCents : 1000;
+        demoGameSession = {
+          id: 'DEMO_' + Math.random().toString(36).substring(2, 11).toUpperCase(),
+          phone: 'demo',
+          status: 'ACTIVE',
+          isDemo: true,
+          bet_cents: betCents,
+          accumulated_cents: 0,
+          target_cents: Math.round(betCents * 2.0),
+          target_multiplier: 2.0,
+          board: Array(8).fill(0).map(() => Array(8).fill(0)),
+          tray: await generateTray('demo')
+        };
+        const mappedDemo = {
+          id: demoGameSession.id,
+          phone: demoGameSession.phone,
+          status: demoGameSession.status,
+          betCents: demoGameSession.bet_cents,
+          accumulatedCents: demoGameSession.accumulated_cents,
+          targetCents: demoGameSession.target_cents,
+          targetMultiplier: demoGameSession.target_multiplier,
+          board: demoGameSession.board,
+          tray: demoGameSession.tray
+        };
+        return new Response(JSON.stringify({ session: mappedDemo }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
       const { betCents } = body;
       if (!betCents || betCents < 100) {
         return new Response(JSON.stringify({ message: "Aposta mínima de R$ 1,00" }), { status: 400 });
@@ -983,9 +1013,81 @@
 
     // Route: Placed a piece move
     if (urlString.startsWith('/api/game/') && urlString.endsWith('/move') && method === 'POST') {
-      if (!user) return new Response(JSON.stringify({ message: "Não autorizado" }), { status: 401 });
       const parts = urlString.split('/');
       const gameId = parts[3];
+
+      if (!user || gameId.startsWith('DEMO_')) {
+        if (!demoGameSession || demoGameSession.id !== gameId) {
+          return new Response(JSON.stringify({ message: "Partida inválida." }), { status: 400 });
+        }
+
+        const rate = 0.50; // Demo mode: 50% reward rate per line (higher payout than normal)
+        const { pieceIndex, row, col } = body;
+        const piece = demoGameSession.tray[pieceIndex];
+        if (!piece || !piece.available) {
+          return new Response(JSON.stringify({ message: "Peça indisponível." }), { status: 400 });
+        }
+
+        if (!canPlacePiece(demoGameSession.board, piece.cells, row, col)) {
+          return new Response(JSON.stringify({ message: "Posição inválida." }), { status: 400 });
+        }
+
+        demoGameSession.board = applyPiece(demoGameSession.board, piece.cells, row, col, piece.colorId);
+        piece.available = false;
+
+        const cleared = getClearedLines(demoGameSession.board);
+        const clearedCount = cleared.rows.length + cleared.cols.length;
+        let gainedCents = 0;
+
+        if (clearedCount > 0) {
+          gainedCents = Math.round(demoGameSession.bet_cents * rate * clearedCount);
+          demoGameSession.accumulated_cents += gainedCents;
+
+          for (const r of cleared.rows) {
+            for (let c = 0; c < 8; c++) demoGameSession.board[r][c] = 0;
+          }
+          for (const c of cleared.cols) {
+            for (let r = 0; r < 8; r++) demoGameSession.board[r][c] = 0;
+          }
+        }
+
+        const allUsed = demoGameSession.tray.every(p => !p.available);
+        if (allUsed) {
+          demoGameSession.tray = await generateTray('demo');
+        }
+
+        let gameOver = true;
+        for (const p of demoGameSession.tray) {
+          if (p.available && pieceCanFitAnywhere(demoGameSession.board, p.cells, p.width, p.height)) {
+            gameOver = false;
+            break;
+          }
+        }
+
+        if (gameOver) {
+          demoGameSession.status = 'LOST';
+        }
+
+        const mappedGame = {
+          id: demoGameSession.id,
+          phone: demoGameSession.phone,
+          status: demoGameSession.status,
+          betCents: demoGameSession.bet_cents,
+          accumulatedCents: demoGameSession.accumulated_cents,
+          targetCents: demoGameSession.target_cents,
+          targetMultiplier: demoGameSession.target_multiplier,
+          board: demoGameSession.board,
+          tray: demoGameSession.tray
+        };
+
+        return new Response(JSON.stringify({
+          clearedRows: cleared.rows,
+          clearedCols: cleared.cols,
+          gainedCents: gainedCents,
+          gameOver: gameOver,
+          session: mappedGame
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
 
       try {
         const game = await dbGetActiveGame(user.phone);
@@ -1091,9 +1193,31 @@
 
     // Route: Cashout
     if (urlString.startsWith('/api/game/') && urlString.endsWith('/cashout') && method === 'POST') {
-      if (!user) return new Response(JSON.stringify({ message: "Não autorizado" }), { status: 401 });
       const parts = urlString.split('/');
       const gameId = parts[3];
+
+      if (!user || gameId.startsWith('DEMO_')) {
+        if (!demoGameSession || demoGameSession.id !== gameId) {
+          return new Response(JSON.stringify({ message: "Partida inválida." }), { status: 400 });
+        }
+
+        demoGameSession.status = 'WON';
+        const payoutCents = demoGameSession.accumulated_cents;
+        const mappedGame = {
+          id: demoGameSession.id,
+          phone: demoGameSession.phone,
+          status: 'WON',
+          betCents: demoGameSession.bet_cents,
+          accumulatedCents: demoGameSession.accumulated_cents,
+          targetCents: demoGameSession.target_cents,
+          targetMultiplier: demoGameSession.target_multiplier,
+          board: demoGameSession.board,
+          tray: demoGameSession.tray
+        };
+
+        demoGameSession = null;
+        return new Response(JSON.stringify({ session: mappedGame, payoutCents: payoutCents }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
 
       try {
         const game = await dbGetActiveGame(user.phone);
@@ -1164,7 +1288,10 @@
 
     // Route: Forfeit
     if (urlString === '/api/game/forfeit' && method === 'POST') {
-      if (!user) return new Response(JSON.stringify({ message: "Não autorizado" }), { status: 401 });
+      if (!user) {
+        demoGameSession = null;
+        return new Response(JSON.stringify({ success: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
       try {
         const activeGame = await dbGetActiveGame(user.phone);
         if (activeGame) {
