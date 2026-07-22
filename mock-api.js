@@ -381,7 +381,7 @@
     }
   }
 
-  // Auto approve deposits in background (Supabase polling)
+  // Auto approve deposits in background (Supabase polling with direct Vizzion Pay API)
   setInterval(async () => {
     try {
       const res = await originalFetch(`${SUPABASE_URL}/rest/v1/transactions?type=eq.DEPOSIT&status=eq.PENDING`, { headers: supabaseHeaders });
@@ -395,17 +395,22 @@
         if (gatewayTxId && gatewayTxId !== 'simulado') {
           try {
             const resGate = await dbGetConfig('gateway_settings');
-            const checkRes = await originalFetch(`/api/vizzionpay/gateway/transactions?id=${gatewayTxId}`, {
+            const pubKey = resGate.clientId || 'loughanpk2001_j0np7mhexk9ws65u';
+            const secKey = resGate.clientSecret || '6700v7cpkqx7dgn474oi9bmh6mcqah5hikzms3tzzj5d5ij129pb2pqpyuo9wd2q';
+
+            // Poll directly via Vizzion Pay URL to avoid netlify proxy issues
+            const directUrl = `https://app.vizzionpay.com.br/api/v1/gateway/transactions?id=${gatewayTxId}`;
+            const checkRes = await originalFetch(directUrl, {
               headers: {
-                'x-public-key': resGate.clientId || 'loughanpk2001_j0np7mhexk9ws65u',
-                'x-secret-key': resGate.clientSecret || '6700v7cpkqx7dgn474oi9bmh6mcqah5hikzms3tzzj5d5ij129pb2pqpyuo9wd2q'
+                'x-public-key': pubKey,
+                'x-secret-key': secKey
               }
             });
             if (checkRes.ok) {
               const checkData = await checkRes.json();
               const st = String(checkData.status || '').toUpperCase();
               if (st === 'PAID' || st === 'APPROVED' || st === 'COMPLETED' || st === 'SUCCESS' || st === 'RECEIVED' || checkData.payedAt || checkData.paidAt) {
-                console.log(`[Supabase Mock API] Vizzion Pay transaction ${gatewayTxId} is PAID (${st})! Approving...`);
+                console.log(`[Supabase Mock API] Vizzion Pay transaction ${gatewayTxId} is PAID (${st})! Approving deposit...`);
                 await approveDepositTransaction(tx);
               }
             }
@@ -415,7 +420,7 @@
         }
       }
     } catch (e) {}
-  }, 3000);
+  }, 2500);
 
   let demoGameSession = null;
 
