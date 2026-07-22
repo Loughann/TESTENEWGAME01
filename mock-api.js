@@ -429,8 +429,15 @@
     let urlString = typeof url === 'string' ? url : url.url;
     
     if (urlString.startsWith('http://') || urlString.startsWith('https://')) {
-      const parsed = new URL(urlString);
-      urlString = parsed.pathname;
+      try {
+        const parsed = new URL(urlString);
+        if (parsed.origin !== window.location.origin) {
+          return originalFetch.apply(window, arguments);
+        }
+        urlString = parsed.pathname;
+      } catch (e) {
+        return originalFetch.apply(window, arguments);
+      }
     }
 
     if (!urlString.startsWith('/api/') || urlString.startsWith('/api/vizzionpay/')) {
