@@ -1,6 +1,6 @@
 {
-  "name": "Block Win",
-  "short_name": "Block Win",
+  "name": "Block Cash",
+  "short_name": "Block Cash",
   "description": "Encaixe os blocos e ganhe prêmios reais.",
   "start_url": "/painel",
   "scope": "/",

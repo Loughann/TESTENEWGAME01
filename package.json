@@ -1,7 +1,7 @@
 {
   "name": "block-win",
   "version": "1.0.0",
-  "description": "Clone do JogarBlock.fun - Block Blast Monetizado",
+  "description": "Clone do JogarBlock.fun - Block Cash Monetizado",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

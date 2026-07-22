@@ -358,7 +358,7 @@ app.post('/api/wallet/deposit', (req, res) => {
 
   const txid = 'TX' + generateId();
   // Standard simulated PIX QR Code & copy-paste code
-  const pixCode = `00020101021126580014br.gov.bcb.pix0136blockwin-simulated-keys-pix-keys0218BlockWin Game Play5204000053039865405${(amountCents / 100).toFixed(2)}5802BR5915BLOCKWIN JOGOS6009SAO PAULO62170513${txid}6304FC3C`;
+  const pixCode = `00020101021126580014br.gov.bcb.pix0136blockcash-simulated-keys-pix-keys0218BlockCash Game Play5204000053039865405${(amountCents / 100).toFixed(2)}5802BR5915BLOCKCASH JOGOS6009SAO PAULO62170513${txid}6304FC3C`;
   const qrcode = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(pixCode)}`;
 
   const db = readDB();

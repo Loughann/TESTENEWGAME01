@@ -657,8 +657,8 @@
             identifier: txid,
             amount: amountCents / 100,
             client: {
-              name: user.name || "Jogador BlockWin",
-              email: user.email || (user.phone + "@blockwin.com"),
+              name: user.name || "Jogador BlockCash",
+              email: user.email || (user.phone + "@blockcash.com"),
               phone: user.phone,
               document: user.cpf || "12345678909"
             },

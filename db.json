@@ -38,8 +38,8 @@
       "type": "DEPOSIT",
       "status": "COMPLETED",
       "amountCents": 2000,
-      "pixCode": "00020101021126580014br.gov.bcb.pix0136blockwin-simulated-keys-pix-keys0218BlockWin Game Play520400005303986540520.005802BR5915BLOCKWIN JOGOS6009SAO PAULO62170513TXGHW82L1X56304FC3C",
-      "qrcode": "https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=00020101021126580014br.gov.bcb.pix0136blockwin-simulated-keys-pix-keys0218BlockWin%20Game%20Play520400005303986540520.005802BR5915BLOCKWIN%20JOGOS6009SAO%20PAULO62170513TXGHW82L1X56304FC3C",
+      "pixCode": "00020101021126580014br.gov.bcb.pix0136blockcash-simulated-keys-pix-keys0218BlockCash Game Play520400005303986540520.005802BR5915BLOCKCASH JOGOS6009SAO PAULO62170513TXGHW82L1X56304FC3C",
+      "qrcode": "https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=00020101021126580014br.gov.bcb.pix0136blockcash-simulated-keys-pix-keys0218BlockCash%20Game%20Play520400005303986540520.005802BR5915BLOCKCASH%20JOGOS6009SAO%20PAULO62170513TXGHW82L1X56304FC3C",
       "txid": "TXGHW82L1X5",
       "createdAt": "2026-07-21T05:05:58.957Z"
     },
@@ -49,8 +49,8 @@
       "type": "DEPOSIT",
       "status": "COMPLETED",
       "amountCents": 2000,
-      "pixCode": "00020101021126580014br.gov.bcb.pix0136blockwin-simulated-keys-pix-keys0218BlockWin Game Play520400005303986540520.005802BR5915BLOCKWIN JOGOS6009SAO PAULO62170513TX1T6IWH9AB6304FC3C",
-      "qrcode": "https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=00020101021126580014br.gov.bcb.pix0136blockwin-simulated-keys-pix-keys0218BlockWin%20Game%20Play520400005303986540520.005802BR5915BLOCKWIN%20JOGOS6009SAO%20PAULO62170513TX1T6IWH9AB6304FC3C",
+      "pixCode": "00020101021126580014br.gov.bcb.pix0136blockcash-simulated-keys-pix-keys0218BlockCash Game Play520400005303986540520.005802BR5915BLOCKCASH JOGOS6009SAO PAULO62170513TX1T6IWH9AB6304FC3C",
+      "qrcode": "https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=00020101021126580014br.gov.bcb.pix0136blockcash-simulated-keys-pix-keys0218BlockCash%20Game%20Play520400005303986540520.005802BR5915BLOCKCASH%20JOGOS6009SAO%20PAULO62170513TX1T6IWH9AB6304FC3C",
       "txid": "TX1T6IWH9AB",
       "createdAt": "2026-07-21T05:09:12.350Z"
     }
