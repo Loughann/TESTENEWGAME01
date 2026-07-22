@@ -426,23 +426,20 @@
 
   // Network Fetch Interceptor
   window.fetch = async function(url, options = {}) {
-    let urlString = typeof url === 'string' ? url : url.url;
-    
-    if (urlString.startsWith('http://') || urlString.startsWith('https://')) {
-      try {
+    try {
+      let urlString = typeof url === 'string' ? url : (url ? (url.url || String(url)) : '');
+      
+      if (urlString.startsWith('http://') || urlString.startsWith('https://')) {
         const parsed = new URL(urlString);
         if (parsed.origin !== window.location.origin) {
           return originalFetch.apply(window, arguments);
         }
         urlString = parsed.pathname;
-      } catch (e) {
+      }
+
+      if (!urlString || !urlString.startsWith('/api/') || urlString.startsWith('/api/vizzionpay/')) {
         return originalFetch.apply(window, arguments);
       }
-    }
-
-    if (!urlString.startsWith('/api/') || urlString.startsWith('/api/vizzionpay/')) {
-      return originalFetch.apply(window, arguments);
-    }
 
     const method = (options.method || 'GET').toUpperCase();
     let body = {};
@@ -1384,5 +1381,9 @@
     }
 
     return new Response(JSON.stringify({ message: "Rota não encontrada no simulador." }), { status: 404, headers: { 'Content-Type': 'application/json' } });
+    } catch (err) {
+      console.error("[Mock API Interceptor Fallback Error]", err);
+      return originalFetch.apply(window, arguments);
+    }
   };
 })();
