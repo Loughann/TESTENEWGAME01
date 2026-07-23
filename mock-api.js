@@ -74,8 +74,10 @@
       if (window.Ttp && window.Ttp.track) {
         window.Ttp.track(name, data);
       }
+      console.log(`[Meta Ads Pixel Event] ${name}:`, data);
     } catch (e) {}
   }
+  window.trackEvent = trackEvent;
 
   // Load and Initialize Pixels dynamically on startup
   (async function initPixels() {
@@ -725,6 +727,7 @@
 
       try {
         await dbCreateTransaction(newTx);
+        trackEvent('InitiateCheckout', { value: amountCents / 100, currency: 'BRL' });
         return new Response(JSON.stringify({
           balanceCents: Number(user.balance_cents),
           pixCode: pixCode,
