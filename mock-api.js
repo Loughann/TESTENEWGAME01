@@ -347,8 +347,15 @@
   }
 
   async function approveDepositTransaction(tx) {
-    const txs = await dbGetTransactions(tx.phone);
-    const completedCount = txs.filter(t => t.type === 'DEPOSIT' && t.status === 'COMPLETED').length;
+    if (!tx || !tx.id || !tx.phone) return;
+    if (tx.status === 'COMPLETED') return;
+
+    // Mark transaction as COMPLETED first
+    await dbUpdateTransaction(tx.id, { status: 'COMPLETED' });
+
+    const phone = tx.phone;
+    const txs = await dbGetTransactions(phone);
+    const completedCount = txs.filter(t => t.type === 'DEPOSIT' && t.status === 'COMPLETED' && t.id !== tx.id).length;
     
     let bonusCents = 0;
     if (completedCount === 0) {
@@ -360,7 +367,7 @@
         const bonusTxId = 'BN' + Math.random().toString(36).substring(2, 11).toUpperCase();
         await dbCreateTransaction({
           id: bonusTxId,
-          phone: tx.phone,
+          phone: phone,
           type: 'DEPOSIT',
           status: 'COMPLETED',
           amount_cents: bonusCents,
@@ -370,42 +377,51 @@
       }
     }
 
-    await dbUpdateTransaction(tx.id, { status: 'COMPLETED' });
-    const profile = await dbGetProfile(tx.phone);
+    const profile = await dbGetProfile(phone);
     if (profile) {
-      const newBalance = Number(profile.balance_cents) + Number(tx.amount_cents) + bonusCents;
-      await dbUpdateProfile(tx.phone, { balance_cents: newBalance });
+      const currentBal = Number(profile.balance_cents || 0);
+      const depositAmt = Number(tx.amount_cents || 0);
+      const newBalance = currentBal + depositAmt + bonusCents;
+      await dbUpdateProfile(phone, { balance_cents: newBalance });
       
-      trackEvent('Purchase', { value: tx.amount_cents / 100, currency: 'BRL' });
-      console.log(`[Supabase Mock API] Approved deposit ${tx.id}. Balance credited. (Bonus: R$ ${(bonusCents / 100).toFixed(2)})`);
+      trackEvent('Purchase', { value: depositAmt / 100, currency: 'BRL' });
+      console.log(`[Supabase Mock API] Approved deposit ${tx.id} for ${phone}. Balance: ${currentBal} -> ${newBalance} (Bonus: R$ ${(bonusCents / 100).toFixed(2)})`);
     }
   }
 
-  // Auto approve deposits in background (Supabase polling)
-  setInterval(async () => {
+  // Auto approve deposits in background (Supabase polling with direct Vizzion Pay API)
+  async function checkPendingDeposits() {
     try {
       const res = await originalFetch(`${SUPABASE_URL}/rest/v1/transactions?type=eq.DEPOSIT&status=eq.PENDING`, { headers: supabaseHeaders });
       if (!res.ok) return;
       const pendingTxs = await res.json();
 
+      const resGate = await dbGetConfig('gateway_settings');
+      const pubKey = resGate.clientId || resGate.vizzion_public_key || 'loughanpk2001_j0np7mhexk9ws65u';
+      const secKey = resGate.clientSecret || resGate.vizzion_secret_key || '6700v7cpkqx7dgn474oi9bmh6mcqah5hikzms3tzzj5d5ij129pb2pqpyuo9wd2q';
+
       for (const tx of pendingTxs) {
         const pixKey = tx.pix_key || '';
-        const gatewayTxId = pixKey.startsWith('vizzionpay:') ? pixKey.split(':')[1] : '';
+        let gatewayTxId = '';
+        if (pixKey.includes('vizzionpay:')) {
+          gatewayTxId = pixKey.split('vizzionpay:')[1].split('|')[0].trim();
+        }
 
         if (gatewayTxId && gatewayTxId !== 'simulado') {
           try {
-            const resGate = await dbGetConfig('gateway_settings');
-            const checkRes = await originalFetch(`/api/vizzionpay/gateway/transactions?id=${gatewayTxId}`, {
+            const directUrl = `https://app.vizzionpay.com.br/api/v1/gateway/transactions?id=${gatewayTxId}`;
+            const checkRes = await originalFetch(directUrl, {
               headers: {
-                'x-public-key': resGate.clientId || 'loughanpk2001_j0np7mhexk9ws65u',
-                'x-secret-key': resGate.clientSecret || '6700v7cpkqx7dgn474oi9bmh6mcqah5hikzms3tzzj5d5ij129pb2pqpyuo9wd2q'
+                'x-public-key': pubKey,
+                'x-secret-key': secKey
               }
             });
             if (checkRes.ok) {
               const checkData = await checkRes.json();
-              const st = String(checkData.status || '').toUpperCase();
-              if (st === 'PAID' || st === 'APPROVED' || st === 'COMPLETED' || st === 'SUCCESS' || st === 'RECEIVED' || checkData.payedAt || checkData.paidAt) {
-                console.log(`[Supabase Mock API] Vizzion Pay transaction ${gatewayTxId} is PAID (${st})! Approving...`);
+              const item = Array.isArray(checkData) ? checkData[0] : checkData;
+              const st = String(item?.status || '').toUpperCase();
+              if (st === 'PAID' || st === 'APPROVED' || st === 'COMPLETED' || st === 'SUCCESS' || st === 'RECEIVED' || item?.payedAt || item?.paidAt) {
+                console.log(`[Supabase Mock API] Vizzion Pay transaction ${gatewayTxId} is PAID (${st})! Approving deposit...`);
                 await approveDepositTransaction(tx);
               }
             }
@@ -415,7 +431,10 @@
         }
       }
     } catch (e) {}
-  }, 3000);
+  }
+
+  setInterval(checkPendingDeposits, 2000);
+  checkPendingDeposits();
 
   let demoGameSession = null;
 
