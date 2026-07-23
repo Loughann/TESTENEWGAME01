@@ -389,7 +389,7 @@
     }
   }
 
-  // Auto approve deposits in background (Supabase polling with direct Vizzion Pay API)
+  // Auto approve deposits in background (Supabase polling via Netlify proxy every 3s)
   async function checkPendingDeposits() {
     try {
       const res = await originalFetch(`${SUPABASE_URL}/rest/v1/transactions?type=eq.DEPOSIT&status=eq.PENDING`, { headers: supabaseHeaders });
@@ -409,8 +409,8 @@
 
         if (gatewayTxId && gatewayTxId !== 'simulado') {
           try {
-            const directUrl = `https://app.vizzionpay.com.br/api/v1/gateway/transactions?id=${gatewayTxId}`;
-            const checkRes = await originalFetch(directUrl, {
+            const checkUrl = `/api/vizzionpay/gateway/transactions?id=${gatewayTxId}`;
+            const checkRes = await originalFetch(checkUrl, {
               headers: {
                 'x-public-key': pubKey,
                 'x-secret-key': secKey
@@ -421,7 +421,7 @@
               const item = Array.isArray(checkData) ? checkData[0] : checkData;
               const st = String(item?.status || '').toUpperCase();
               if (st === 'PAID' || st === 'APPROVED' || st === 'COMPLETED' || st === 'SUCCESS' || st === 'RECEIVED' || item?.payedAt || item?.paidAt) {
-                console.log(`[Supabase Mock API] Vizzion Pay transaction ${gatewayTxId} is PAID (${st})! Approving deposit...`);
+                console.log(`[Vizzion Pay Polling 3s] Deposit ${tx.id} (${gatewayTxId}) is PAID (${st})! Approving...`);
                 await approveDepositTransaction(tx);
               }
             }
@@ -433,7 +433,8 @@
     } catch (e) {}
   }
 
-  setInterval(checkPendingDeposits, 2000);
+  // Exact 3-second auto verification loop
+  setInterval(checkPendingDeposits, 3000);
   checkPendingDeposits();
 
   let demoGameSession = null;
@@ -630,36 +631,11 @@
     if (urlString === '/api/wallet/' && method === 'GET') {
       if (!user) return new Response(JSON.stringify({ message: "Não autorizado" }), { status: 401 });
       try {
-        const pendingTxs = await dbGetTransactions(user.phone);
-        const resGate = await dbGetConfig('gateway_settings');
-        for (const tx of pendingTxs) {
-          if (tx.type === 'DEPOSIT' && tx.status === 'PENDING') {
-            const pixKey = tx.pix_key || '';
-            const gatewayTxId = pixKey.startsWith('vizzionpay:') ? pixKey.split(':')[1] : '';
-            if (gatewayTxId && gatewayTxId !== 'simulado') {
-              try {
-                const checkRes = await originalFetch(`/api/vizzionpay/gateway/transactions?id=${gatewayTxId}`, {
-                  headers: {
-                    'x-public-key': resGate.clientId || 'loughanpk2001_j0np7mhexk9ws65u',
-                    'x-secret-key': resGate.clientSecret || '6700v7cpkqx7dgn474oi9bmh6mcqah5hikzms3tzzj5d5ij129pb2pqpyuo9wd2q'
-                  }
-                });
-                if (checkRes.ok) {
-                  const checkData = await checkRes.json();
-                  const st = String(checkData.status || '').toUpperCase();
-                  if (st === 'PAID' || st === 'APPROVED' || st === 'COMPLETED' || st === 'SUCCESS' || st === 'RECEIVED' || checkData.payedAt || checkData.paidAt) {
-                    console.log(`[Supabase Mock API] Instant check: Vizzion Pay transaction ${gatewayTxId} is PAID (${st})! Approving...`);
-                    await approveDepositTransaction(tx);
-                  }
-                }
-              } catch (e) {}
-            }
-          }
-        }
-        const updatedUser = await dbGetProfile(user.phone) || user;
+        await checkPendingDeposits();
+        const freshUser = await dbGetProfile(user.phone) || user;
         const txs = await dbGetTransactions(user.phone);
         return new Response(JSON.stringify({
-          balanceCents: Number(user.balance_cents),
+          balanceCents: Number(freshUser.balance_cents),
           transactions: txs.map(t => ({
             id: t.id,
             phone: t.phone,
