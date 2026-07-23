@@ -391,7 +391,8 @@
     }
   }
 
-  // Auto approve deposits in background (Supabase polling via Netlify proxy every 3s)
+  // Auto approve deposits in background (throttled to 10s to prevent Vizzion Pay 429 rate limits)
+  const lastCheckedTxs = new Map();
   async function checkPendingDeposits() {
     try {
       const res = await originalFetch(`${SUPABASE_URL}/rest/v1/transactions?type=eq.DEPOSIT&status=eq.PENDING`, { headers: supabaseHeaders });
@@ -402,6 +403,7 @@
       const pubKey = resGate.clientId || resGate.vizzion_public_key || 'loughanpk2001_j0np7mhexk9ws65u';
       const secKey = resGate.clientSecret || resGate.vizzion_secret_key || '6700v7cpkqx7dgn474oi9bmh6mcqah5hikzms3tzzj5d5ij129pb2pqpyuo9wd2q';
 
+      const now = Date.now();
       for (const tx of pendingTxs) {
         const pixKey = tx.pix_key || '';
         let gatewayTxId = '';
@@ -410,6 +412,11 @@
         }
 
         if (gatewayTxId && gatewayTxId !== 'simulado') {
+          // Skip if checked within last 10 seconds
+          const lastTime = lastCheckedTxs.get(gatewayTxId) || 0;
+          if (now - lastTime < 10000) continue;
+          lastCheckedTxs.set(gatewayTxId, now);
+
           try {
             const checkUrl = `/api/vizzionpay/gateway/transactions?id=${gatewayTxId}`;
             const checkRes = await originalFetch(checkUrl, {
@@ -423,7 +430,7 @@
               const item = Array.isArray(checkData) ? checkData[0] : checkData;
               const st = String(item?.status || '').toUpperCase();
               if (st === 'PAID' || st === 'APPROVED' || st === 'COMPLETED' || st === 'SUCCESS' || st === 'RECEIVED' || item?.payedAt || item?.paidAt) {
-                console.log(`[Vizzion Pay Polling 3s] Deposit ${tx.id} (${gatewayTxId}) is PAID (${st})! Approving...`);
+                console.log(`[Vizzion Pay Polling] Deposit ${tx.id} (${gatewayTxId}) is PAID (${st})! Approving...`);
                 await approveDepositTransaction(tx);
               }
             }
@@ -435,8 +442,7 @@
     } catch (e) {}
   }
 
-  // Exact 3-second auto verification loop
-  setInterval(checkPendingDeposits, 3000);
+  setInterval(checkPendingDeposits, 10000);
   checkPendingDeposits();
 
   let demoGameSession = null;
@@ -657,14 +663,15 @@
 
     // Route: Create deposit PIX
     if (urlString === '/api/wallet/deposit' && method === 'POST') {
-      if (!user) return new Response(JSON.stringify({ message: "Não autorizado" }), { status: 401 });
+      if (!user) return new Response(JSON.stringify({ error: { message: "Não autorizado" }, message: "Não autorizado" }), { status: 401, headers: { 'Content-Type': 'application/json' } });
       const { amountCents } = body;
       
       const config = await dbGetConfig('game_settings', { minDeposit: 20 });
       const minDepCents = config.minDeposit !== undefined ? Number(config.minDeposit) * 100 : 2000;
       
       if (!amountCents || amountCents < minDepCents) {
-        return new Response(JSON.stringify({ message: "Valor mínimo de R$ " + (minDepCents / 100).toFixed(2) }), { status: 400 });
+        const msg = "Valor mínimo de R$ " + (minDepCents / 100).toFixed(2);
+        return new Response(JSON.stringify({ error: { message: msg }, message: msg }), { status: 400, headers: { 'Content-Type': 'application/json' } });
       }
 
       const txid = 'TX' + Math.random().toString(36).substring(2, 11).toUpperCase();
@@ -673,44 +680,71 @@
       let gatewayTxId = '';
 
       const resGate = await dbGetConfig('gateway_settings', { gatewayName: 'vizzionpay' });
-      try {
-        const vizzionRes = await originalFetch('/api/vizzionpay/gateway/pix/receive', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-public-key': resGate.clientId || 'loughanpk2001_j0np7mhexk9ws65u',
-            'x-secret-key': resGate.clientSecret || '6700v7cpkqx7dgn474oi9bmh6mcqah5hikzms3tzzj5d5ij129pb2pqpyuo9wd2q'
-          },
-          body: JSON.stringify({
-            identifier: txid,
-            amount: amountCents / 100,
-            client: {
-              name: user.name || "Jogador BlockCash",
-              email: user.email || (user.phone + "@blockcash.com"),
-              phone: user.phone,
-              document: user.cpf || "12345678909"
+      const pubKey = resGate.clientId || 'loughanpk2001_j0np7mhexk9ws65u';
+      const secKey = resGate.clientSecret || '6700v7cpkqx7dgn474oi9bmh6mcqah5hikzms3tzzj5d5ij129pb2pqpyuo9wd2q';
+
+      let attempt = 0;
+      let vizzionRes = null;
+      let lastErrText = '';
+
+      while (attempt < 3) {
+        attempt++;
+        try {
+          vizzionRes = await originalFetch('/api/vizzionpay/gateway/pix/receive', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-public-key': pubKey,
+              'x-secret-key': secKey
             },
-            callbackUrl: window.location.origin + '/api/webhook/vizzionpay'
-          })
-        });
-        
-        if (vizzionRes.ok) {
-          const vizzionData = await vizzionRes.json();
-          if (vizzionData.pix && vizzionData.pix.code) {
-            pixCode = vizzionData.pix.code;
-            qrcode = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(pixCode)}`;
-            gatewayTxId = vizzionData.transactionId;
-          } else {
-            return new Response(JSON.stringify({ message: "A gateway Vizzion Pay não retornou os dados do Pix." }), { status: 400 });
+            body: JSON.stringify({
+              identifier: txid,
+              amount: amountCents / 100,
+              client: {
+                name: user.name || "Jogador BlockCash",
+                email: user.email || (user.phone + "@blockcash.com"),
+                phone: user.phone,
+                document: user.cpf || "12345678909"
+              },
+              callbackUrl: window.location.origin + '/api/webhook/vizzionpay'
+            })
+          });
+
+          if (vizzionRes.ok) break;
+          
+          lastErrText = await vizzionRes.text();
+          console.warn(`[Vizzionpay API] Attempt ${attempt} failed with status ${vizzionRes.status}:`, lastErrText);
+
+          if (vizzionRes.status === 429 && attempt < 3) {
+            await new Promise(r => setTimeout(r, 1200));
           }
-        } else {
-          const errText = await vizzionRes.text();
-          console.error("[Vizzionpay API] Error:", errText);
-          return new Response(JSON.stringify({ message: "Erro na Gateway Vizzion Pay: " + errText }), { status: 400 });
+        } catch (e) {
+          lastErrText = e.message || 'Falha de conexão';
+          if (attempt < 3) await new Promise(r => setTimeout(r, 1200));
         }
-      } catch (e) {
-        console.error("[Vizzionpay API] Failed:", e);
-        return new Response(JSON.stringify({ message: "Falha de conexão com a gateway de pagamento Vizzion Pay." }), { status: 500 });
+      }
+
+      if (vizzionRes && vizzionRes.ok) {
+        const vizzionData = await vizzionRes.json();
+        if (vizzionData.pix && vizzionData.pix.code) {
+          pixCode = vizzionData.pix.code;
+          qrcode = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(pixCode)}`;
+          gatewayTxId = vizzionData.transactionId;
+        } else {
+          const msg = "A gateway Vizzion Pay não retornou os dados do Pix.";
+          return new Response(JSON.stringify({ error: { message: msg }, message: msg }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+        }
+      } else {
+        let msg = "Erro na Gateway Vizzion Pay: " + (lastErrText || "Falha de comunicação");
+        try {
+          const errObj = JSON.parse(lastErrText);
+          if (errObj.error && (errObj.error.errorCode === 'RATE_LIMITED' || errObj.error.statusCode === 429)) {
+            msg = "A gateway Vizzion Pay está em pausa temporária de segurança (Rate Limit). Por favor, aguarde 1 ou 2 minutos e tente gerar o PIX novamente.";
+          } else if (errObj.error && errObj.error.message) {
+            msg = errObj.error.message;
+          }
+        } catch(e) {}
+        return new Response(JSON.stringify({ error: { message: msg }, message: msg }), { status: 400, headers: { 'Content-Type': 'application/json' } });
       }
 
       const newTx = {
