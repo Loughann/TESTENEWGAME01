@@ -444,7 +444,10 @@
     
     if (urlString.startsWith('http://') || urlString.startsWith('https://')) {
       const parsed = new URL(urlString);
-      urlString = parsed.pathname;
+      if (parsed.origin !== window.location.origin) {
+        return originalFetch.apply(window, arguments);
+      }
+      urlString = parsed.pathname + parsed.search;
     }
 
     if (!urlString.startsWith('/api/') || urlString.startsWith('/api/vizzionpay/')) {
