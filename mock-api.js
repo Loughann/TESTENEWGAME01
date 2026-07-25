@@ -66,15 +66,20 @@
   ];
 
   // Ads Pixel Tracking Helper
-  function trackEvent(name, data = {}) {
+  function trackEvent(name, data = {}, eventId = null) {
     try {
+      const opts = eventId ? { eventID: String(eventId) } : undefined;
       if (window.fbq) {
-        window.fbq('track', name, data);
+        if (opts) {
+          window.fbq('track', name, data, opts);
+        } else {
+          window.fbq('track', name, data);
+        }
       }
       if (window.Ttp && window.Ttp.track) {
         window.Ttp.track(name, data);
       }
-      console.log(`[Meta Ads Pixel Event] ${name}:`, data);
+      console.log(`[Meta Ads Pixel Event] ${name}:`, data, opts);
     } catch (e) {}
   }
   window.trackEvent = trackEvent;
@@ -386,7 +391,7 @@
       const newBalance = currentBal + depositAmt + bonusCents;
       await dbUpdateProfile(phone, { balance_cents: newBalance });
       
-      trackEvent('Purchase', { value: depositAmt / 100, currency: 'BRL' });
+      trackEvent('Purchase', { value: depositAmt / 100, currency: 'BRL' }, tx.id);
       console.log(`[Supabase Mock API] Approved deposit ${tx.id} for ${phone}. Balance: ${currentBal} -> ${newBalance} (Bonus: R$ ${(bonusCents / 100).toFixed(2)})`);
     }
   }

@@ -201,6 +201,48 @@ exports.handler = async function(event, context) {
     });
 
     console.log(`[Webhook Vizzionpay] Sucesso! Depósito creditado para ${phone}: R$ ${amount.toFixed(2)} + Bônus R$ ${(bonusCents/100).toFixed(2)}. Novo Saldo: R$ ${(newBalanceCents/100).toFixed(2)}`);
+    // 4.5. Send Meta Conversions API (CAPI) Purchase Event
+    try {
+      const adsConfigRes = await fetch(`${SUPABASE_URL}/rest/v1/config?key=eq.ads_settings`, { headers });
+      if (adsConfigRes.ok) {
+        const adsData = await adsConfigRes.json();
+        if (adsData[0] && adsData[0].value) {
+          const adsVal = typeof adsData[0].value === 'string' ? JSON.parse(adsData[0].value) : adsData[0].value;
+          const { metaPixelId, metaAccessToken } = adsVal;
+          if (metaPixelId) {
+            const crypto = require('crypto');
+            const sha256 = s => crypto.createHash('sha256').update(String(s || '').trim().toLowerCase()).digest('hex');
+            
+            const capiUrl = `https://graph.facebook.com/v19.0/${metaPixelId}/events${metaAccessToken ? `?access_token=${metaAccessToken}` : ''}`;
+            await fetch(capiUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                data: [{
+                  event_name: 'Purchase',
+                  event_time: Math.floor(Date.now() / 1000),
+                  event_id: String(gatewayTxId),
+                  event_source_url: 'https://block-cash.fun/',
+                  action_source: 'website',
+                  user_data: {
+                    ph: phone ? [sha256(phone)] : [],
+                    em: clientEmail ? [sha256(clientEmail)] : []
+                  },
+                  custom_data: {
+                    value: amount,
+                    currency: 'BRL'
+                  }
+                }]
+              })
+            }).catch(e => console.error('[Meta CAPI] POST error:', e));
+            console.log(`[Meta CAPI] Dispatched Purchase event for ${gatewayTxId}: R$ ${amount}`);
+          }
+        }
+      }
+    } catch (e) {
+      console.error('[Meta CAPI] Failed to send CAPI Purchase:', e);
+    }
+
 
     // 5. Resposta de Sucesso
     return {
