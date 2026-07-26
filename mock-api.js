@@ -396,60 +396,9 @@
     }
   }
 
-  // Auto approve deposits in background (throttled to 10s to prevent Vizzion Pay 429 rate limits)
-  const lastCheckedTxs = new Map();
-  async function checkPendingDeposits() {
-    try {
-      const res = await originalFetch(`${SUPABASE_URL}/rest/v1/transactions?type=eq.DEPOSIT&status=eq.PENDING`, { headers: supabaseHeaders });
-      if (!res.ok) return;
-      const pendingTxs = await res.json();
-
-      const resGate = await dbGetConfig('gateway_settings');
-      const pubKey = resGate.clientId || resGate.vizzion_public_key || 'loughanpk2001_j0np7mhexk9ws65u';
-      const secKey = resGate.clientSecret || resGate.vizzion_secret_key || '6700v7cpkqx7dgn474oi9bmh6mcqah5hikzms3tzzj5d5ij129pb2pqpyuo9wd2q';
-
-      const now = Date.now();
-      for (const tx of pendingTxs) {
-        const pixKey = tx.pix_key || '';
-        let gatewayTxId = '';
-        if (pixKey.includes('vizzionpay:')) {
-          gatewayTxId = pixKey.split('vizzionpay:')[1].split('|')[0].trim();
-        }
-
-        if (gatewayTxId && gatewayTxId !== 'simulado') {
-          // Skip if checked within last 10 seconds
-          const lastTime = lastCheckedTxs.get(gatewayTxId) || 0;
-          if (now - lastTime < 10000) continue;
-          lastCheckedTxs.set(gatewayTxId, now);
-
-          try {
-            const checkUrl = `/api/vizzionpay/gateway/transactions?id=${gatewayTxId}`;
-            const checkRes = await originalFetch(checkUrl, {
-              headers: {
-                'x-public-key': pubKey,
-                'x-secret-key': secKey
-              }
-            });
-            if (checkRes.ok) {
-              const checkData = await checkRes.json();
-              const item = Array.isArray(checkData) ? checkData[0] : checkData;
-              const st = String(item?.status || '').toUpperCase();
-              if (st === 'PAID' || st === 'APPROVED' || st === 'COMPLETED' || st === 'SUCCESS' || st === 'RECEIVED' || item?.payedAt || item?.paidAt) {
-                console.log(`[Vizzion Pay Polling] Deposit ${tx.id} (${gatewayTxId}) is PAID (${st})! Approving...`);
-                await approveDepositTransaction(tx);
-              }
-            }
-          } catch (e) {
-            console.error("[Vizzionpay API] Error polling status for transaction:", gatewayTxId, e);
-          }
-        }
-      }
-    } catch (e) {}
-  }
-
-  setInterval(checkPendingDeposits, 10000);
-  checkPendingDeposits();
-
+  // Note: Client-side background polling of Vizzion Pay API was removed to prevent Vizzion Pay HTTP 429 Rate Limits.
+  // Deposits are automatically approved via Vizzion Pay POST Webhook at /api/webhook/vizzionpay.
+  
   let demoGameSession = null;
 
   // Network Fetch Interceptor
