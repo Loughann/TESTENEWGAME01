@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Painel Admin Completo | Block Cash</title>
-  <script src="/mock-api.js?v=32"></script>
+  <script src="/mock-api.js?v=33"></script>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
   <style>
     :root {
@@ -325,7 +325,12 @@
               <label for="pixel-meta-id">ID do Pixel do Facebook</label>
               <input type="text" id="pixel-meta-id" class="form-control" placeholder="Cole o ID do pixel aqui">
             </div>
-            <p style="font-size: 0.85rem; color: var(--text-dim); margin-bottom: 20px;">Rastreia os eventos de: CompleteRegistration (no cadastro), Purchase (ao creditar depósito) e InitiateCheckout (ao começar aposta).</p>
+
+            <div class="form-group">
+              <label for="pixel-meta-token">Token de Acesso da API de Conversões (CAPI Meta)</label>
+              <input type="text" id="pixel-meta-token" class="form-control" placeholder="Cole o Token de Acesso da Meta CAPI aqui">
+            </div>
+            <p style="font-size: 0.85rem; color: var(--text-dim); margin-bottom: 20px;">Garante o envio automático de eventos Purchase via Servidor (CAPI Meta) com 100% de precisão nos anúncios.</p>
 
             <h3>Pixel do TikTok Ads</h3>
             <div class="form-group">
@@ -619,6 +624,7 @@ function getWaLink(phone) {
         if (adsData[0] && adsData[0].value) {
           const val = typeof adsData[0].value === 'string' ? JSON.parse(adsData[0].value) : adsData[0].value;
           document.getElementById('pixel-meta-id').value = val.metaPixelId || '';
+          if (document.getElementById('pixel-meta-token')) document.getElementById('pixel-meta-token').value = val.metaAccessToken || '';
           document.getElementById('pixel-tiktok-id').value = val.tiktokPixelId || '';
         }
 
@@ -1032,6 +1038,7 @@ function getWaLink(phone) {
 
     window.saveAdsSettings = async function() {
       const metaId = document.getElementById('pixel-meta-id').value.trim();
+      const metaToken = document.getElementById('pixel-meta-token') ? document.getElementById('pixel-meta-token').value.trim() : '';
       const tiktokId = document.getElementById('pixel-tiktok-id').value.trim();
 
       try {
@@ -1040,7 +1047,7 @@ function getWaLink(phone) {
           headers: { ...SB_HEADERS, 'Prefer': 'resolution=merge-duplicates' },
           body: JSON.stringify({
             key: 'ads_settings',
-            value: { metaPixelId: metaId, tiktokPixelId: tiktokId }
+            value: { metaPixelId: metaId, metaAccessToken: metaToken, tiktokPixelId: tiktokId }
           })
         });
 
