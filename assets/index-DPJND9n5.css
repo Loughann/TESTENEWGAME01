@@ -47,3 +47,86 @@
 .age-gate-text{font-size:0.95rem;color:var(--text-dim,#94a3b8);line-height:1.5;margin-bottom:24px}
 .age-gate-actions{display:flex;flex-direction:column;gap:12px}
 @keyframes modalPop{0%{opacity:0;transform:scale(0.85) translateY(10px)}100%{opacity:1;transform:scale(1) translateY(0)}}
+
+/* WhatsApp Floating & PIX Scarcity Styles */
+#whatsapp-support-floating {
+  position: fixed;
+  bottom: 80px;
+  right: 16px;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: linear-gradient(135deg, #25D366 0%, #128C7E 100%);
+  color: #ffffff;
+  font-weight: 700;
+  font-size: 0.88rem;
+  border-radius: 50px;
+  text-decoration: none;
+  box-shadow: 0 4px 18px rgba(37, 211, 102, 0.45);
+  animation: pulseWa 2s infinite;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+#whatsapp-support-floating:hover {
+  transform: scale(1.06);
+  box-shadow: 0 6px 24px rgba(37, 211, 102, 0.6);
+}
+@keyframes pulseWa {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+  100% { transform: scale(1); }
+}
+
+.pix-scarcity-banner {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.18) 0%, rgba(239, 68, 68, 0.18) 100%);
+  border: 1.5px solid #f59e0b;
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin-bottom: 16px;
+  text-align: center;
+  box-shadow: 0 4px 15px rgba(245, 158, 11, 0.25);
+  animation: scarcityGlow 1.8s infinite alternate ease-in-out;
+}
+@keyframes scarcityGlow {
+  0% { border-color: #f59e0b; box-shadow: 0 0 10px rgba(245, 158, 11, 0.3); }
+  100% { border-color: #ef4444; box-shadow: 0 0 18px rgba(239, 68, 68, 0.5); }
+}
+.pix-scarcity-title {
+  font-size: 0.88rem;
+  font-weight: 800;
+  color: #f59e0b;
+  letter-spacing: 0.4px;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+}
+.pix-scarcity-body {
+  font-size: 0.85rem;
+  color: #f1f5f9;
+  line-height: 1.45;
+}
+.pix-scarcity-highlight {
+  color: #22c55e;
+  font-weight: 800;
+  text-shadow: 0 0 8px rgba(34, 197, 94, 0.4);
+}
+.pix-whatsapp-help {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 14px;
+  padding: 10px 14px;
+  background: rgba(37, 211, 102, 0.12);
+  border: 1px solid rgba(37, 211, 102, 0.35);
+  border-radius: 10px;
+  color: #25D366;
+  font-size: 0.84rem;
+  font-weight: 700;
+  text-decoration: none;
+  transition: all 0.2s ease;
+}
+.pix-whatsapp-help:hover {
+  background: rgba(37, 211, 102, 0.25);
+  transform: translateY(-1px);
+}
