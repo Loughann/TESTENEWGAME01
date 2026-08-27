@@ -201,7 +201,37 @@ exports.handler = async function(event, context) {
     });
 
     console.log(`[Webhook Vizzionpay] Sucesso! Depósito creditado para ${phone}: R$ ${amount.toFixed(2)} + Bônus R$ ${(bonusCents/100).toFixed(2)}. Novo Saldo: R$ ${(newBalanceCents/100).toFixed(2)}`);
-    // 4.5. Send Meta Conversions API (CAPI) Purchase Event
+
+    // 4.6. Process Influencer / Affiliate Commission
+    if (profile.referred_by) {
+      try {
+        const refQuery = `${SUPABASE_URL}/rest/v1/profiles?or=(referral_code.eq.${profile.referred_by},phone.eq.${profile.referred_by})`;
+        const refRes = await fetch(refQuery, { headers });
+        if (refRes.ok) {
+          const refUsers = await refRes.json();
+          if (refUsers && refUsers.length > 0) {
+            const referrer = refUsers[0];
+            const commPercent = Number(referrer.custom_commission_rate) || 10;
+            const commCents = Math.round(amountCents * (commPercent / 100));
+            if (commCents > 0) {
+              const newCommBalance = Number(referrer.comissao_saldo_cents || 0) + commCents;
+              const newTotalComm = Number(referrer.total_commission_cents || 0) + commCents;
+              await fetch(`${SUPABASE_URL}/rest/v1/profiles?phone=eq.${referrer.phone}`, {
+                method: 'PATCH',
+                headers,
+                body: JSON.stringify({
+                  comissao_saldo_cents: newCommBalance,
+                  total_commission_cents: newTotalComm
+                })
+              });
+              console.log(`[Influencer Commission] Credited R$ ${(commCents/100).toFixed(2)} (${commPercent}%) to influencer ${referrer.name || referrer.phone} from deposit by ${phone}`);
+            }
+          }
+        }
+      } catch (errComm) {
+        console.error('[Influencer Commission Error]', errComm);
+      }
+    }    // 4.5. Send Meta Conversions API (CAPI) Purchase Event
     try {
       const adsConfigRes = await fetch(`${SUPABASE_URL}/rest/v1/config?key=eq.ads_settings`, { headers });
       if (adsConfigRes.ok) {

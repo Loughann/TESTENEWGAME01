@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Painel Admin Completo | Block Cash</title>
-  <script src="/mock-api.js?v=34"></script>
+  <script src="/mock-api.js?v=35"></script>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
   <style>
     :root {
@@ -108,7 +108,171 @@
     
     .tab-header-flex { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
     .status-success-inline { color: var(--success); font-size: 0.9rem; margin-left: 15px; display: inline-block; font-weight: 600; }
-  </style>
+  
+    /* Influencer Section & Modals */
+    .influencer-stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 15px;
+      margin-bottom: 25px;
+    }
+    .stat-inf-card {
+      background: rgba(30, 41, 59, 0.6);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 16px 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      position: relative;
+      overflow: hidden;
+    }
+    .stat-inf-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0; height: 3px;
+      background: linear-gradient(90deg, #a855f7, #6366f1);
+    }
+    .stat-inf-card.profit::before {
+      background: linear-gradient(90deg, #10b981, #059669);
+    }
+    .stat-inf-card.deposit::before {
+      background: linear-gradient(90deg, #3b82f6, #06b6d4);
+    }
+    .stat-inf-label {
+      font-size: 0.8rem;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      font-weight: 600;
+    }
+    .stat-inf-value {
+      font-size: 1.4rem;
+      font-weight: 800;
+      color: var(--text);
+    }
+    .stat-inf-sub {
+      font-size: 0.75rem;
+      color: var(--text-dim);
+    }
+
+    /* Modals */
+    .admin-modal-backdrop {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0, 0, 0, 0.75);
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+      z-index: 10000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .admin-modal-box {
+      background: #0f172a;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 18px;
+      width: 100%;
+      max-width: 680px;
+      max-height: 88vh;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.8);
+      animation: modalFadeIn 0.2s ease-out;
+    }
+    @keyframes modalFadeIn {
+      from { opacity: 0; transform: scale(0.95); }
+      to { opacity: 1; transform: scale(1); }
+    }
+    .admin-modal-header {
+      padding: 18px 22px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .admin-modal-header h3 {
+      font-size: 1.2rem;
+      font-weight: 700;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .admin-modal-close {
+      background: transparent;
+      border: none;
+      color: var(--text-dim);
+      font-size: 1.4rem;
+      cursor: pointer;
+      line-height: 1;
+      padding: 4px 8px;
+      border-radius: 6px;
+    }
+    .admin-modal-close:hover {
+      color: #fff;
+      background: rgba(255,255,255,0.1);
+    }
+    .admin-modal-body {
+      padding: 22px;
+      overflow-y: auto;
+      flex: 1;
+    }
+    .admin-modal-footer {
+      padding: 16px 22px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      justify-content: flex-end;
+      gap: 12px;
+    }
+
+    .badge-influencer-tag {
+      background: rgba(168, 85, 247, 0.2);
+      color: #c084fc;
+      border: 1px solid rgba(168, 85, 247, 0.4);
+      padding: 3px 8px;
+      border-radius: 6px;
+      font-weight: 700;
+      font-size: 0.75rem;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .btn-copy-link {
+      background: rgba(59, 130, 246, 0.15);
+      border: 1px solid rgba(59, 130, 246, 0.35);
+      color: #60a5fa;
+      padding: 4px 8px;
+      border-radius: 6px;
+      font-size: 0.72rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .btn-copy-link:hover {
+      background: rgba(59, 130, 246, 0.3);
+      color: #fff;
+    }
+    .btn-view-players {
+      background: rgba(99, 102, 241, 0.18);
+      border: 1px solid rgba(99, 102, 241, 0.4);
+      color: #a5b4fc;
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .btn-view-players:hover {
+      background: rgba(99, 102, 241, 0.35);
+      color: #fff;
+    }
+</style>
 </head>
 <body>
 
@@ -222,6 +386,7 @@
                 <tr>
                   <th>Nome</th>
                   <th>Telefone</th>
+                  <th>Status / Influencer</th>
                   <th>Saldo Principal</th>
                   <th>Comissões</th>
                   <th>Partidas</th>
@@ -239,19 +404,54 @@
 
         <!-- TAB: Influenciadores -->
         <div id="tab-influencers" class="tab-content">
+          <!-- Influencer Stats KPI Cards -->
+          <div class="influencer-stats-grid">
+            <div class="stat-inf-card">
+              <span class="stat-inf-label">Total de Influencers</span>
+              <span id="inf-total-count" class="stat-inf-value">0</span>
+              <span class="stat-inf-sub">Afiliados e parceiros ativos</span>
+            </div>
+            <div class="stat-inf-card deposit">
+              <span class="stat-inf-label">Jogadores Recrutados</span>
+              <span id="inf-total-players" class="stat-inf-value">0</span>
+              <span class="stat-inf-sub">Contas cadastradas por links</span>
+            </div>
+            <div class="stat-inf-card deposit">
+              <span class="stat-inf-label">Depósitos por Indicados</span>
+              <span id="inf-total-deposits" class="stat-inf-value" style="color: #38bdf8;">R$ 0,00</span>
+              <span class="stat-inf-sub">Faturamento bruto gerado</span>
+            </div>
+            <div class="stat-inf-card">
+              <span class="stat-inf-label">Comissões Geradas</span>
+              <span id="inf-total-commissions" class="stat-inf-value" style="color: var(--gold);">R$ 0,00</span>
+              <span class="stat-inf-sub">Total acumulado de comissões</span>
+            </div>
+            <div class="stat-inf-card profit">
+              <span class="stat-inf-label">Lucro Líquido da Casa</span>
+              <span id="inf-total-profit" class="stat-inf-value" style="color: var(--success);">R$ 0,00</span>
+              <span id="inf-total-margin" class="stat-inf-sub" style="color: #34d399;">Margem de lucro: 100%</span>
+            </div>
+          </div>
+
           <div class="card-table">
-            <div class="table-header">
-              <h3>Seção de Influencers e Afiliados</h3>
+            <div class="table-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+              <div>
+                <h3>Gestão Completa de Influencers & Afiliados</h3>
+                <p style="font-size: 0.85rem; color: var(--text-dim); margin-top: 4px;">Altere % de comissão individual, veja depósitos trazidos, jogadores recrutados e lucro da casa em tempo real.</p>
+              </div>
+              <button class="btn-save-custom" style="background: linear-gradient(135deg, #a855f7, #6366f1); margin: 0; padding: 10px 18px; font-size: 0.88rem; box-shadow: 0 4px 12px rgba(168,85,247,0.35);" onclick="openAddInfluencerModal()">➕ Adicionar / Promover Influencer</button>
             </div>
             <table>
               <thead>
                 <tr>
-                  <th>Nome</th>
-                  <th>Telefone / ID</th>
-                  <th>Código Ref</th>
-                  <th>Total Indicados</th>
-                  <th>Comissão Acumulada</th>
-                  <th>Saldo de Comissão</th>
+                  <th>Influencer</th>
+                  <th>Código / Link</th>
+                  <th>% Comissão</th>
+                  <th>Jogadores</th>
+                  <th>Depósitos Trazidos</th>
+                  <th>Comissão Gerada</th>
+                  <th>Saldo Disponível</th>
+                  <th>Lucro da Casa</th>
                   <th>Ações</th>
                 </tr>
               </thead>
@@ -760,16 +960,37 @@ const contactedPhonesSet = new Set();
         document.getElementById('stat-avg-bet').innerText = 'R$ ' + (avgBet / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
         document.getElementById('stat-conversion').innerText = conversion.toFixed(2) + '%';
 
+        window.currentProfiles = profiles;
+        window.currentTxs = txs;
+
         const usersTbody = document.getElementById('users-table-body');
         usersTbody.innerHTML = '';
         profiles.forEach(p => {
           const tr = document.createElement('tr');
+          const isInf = p.role === 'INFLUENCER' || (p.custom_commission_rate !== null && p.custom_commission_rate !== undefined);
+          const commRate = Number(p.custom_commission_rate) || 10;
+          
+          let infStatusCol = '';
+          if (isInf) {
+            infStatusCol = `
+              <div style="display:flex; flex-direction:column; gap:4px; align-items:flex-start;">
+                <span class="badge-influencer-tag">⭐ Influencer (${commRate}%)</span>
+                <button class="btn-action btn-danger" style="padding:2px 6px; font-size:0.7rem;" onclick="removeInfluencer('${p.phone}')">Remover</button>
+              </div>
+            `;
+          } else {
+            infStatusCol = `
+              <button class="btn-action" style="background:linear-gradient(135deg, #a855f7, #6366f1); color:#fff; font-size:0.75rem; padding:4px 8px; font-weight:700;" onclick="promptMakeInfluencer('${p.phone}', '${(p.name || '').replace(/'/g, "\'")}')">⭐ Tornar Influencer</button>
+            `;
+          }
+
           tr.innerHTML = `
-            <td>${p.name}</td>
+            <td><strong>${p.name}</strong></td>
             <td>${getWaLink(p.phone)}</td>
-            <td style="font-weight: 600; color: var(--success);">R$ &nbsp;${(p.balance_cents / 100).toFixed(2)}</td>
-            <td style="color: var(--gold);">R$ &nbsp;${(p.comissao_saldo_cents / 100).toFixed(2)}</td>
-            <td>${p.games_played}</td>
+            <td>${infStatusCol}</td>
+            <td style="font-weight: 600; color: var(--success);">R$ ${(p.balance_cents / 100).toFixed(2)}</td>
+            <td style="color: var(--gold); font-weight: 600;">R$ ${(p.comissao_saldo_cents / 100).toFixed(2)}</td>
+            <td>${p.games_played || 0}</td>
             <td>${p.referred_by || '-'}</td>
             <td>
               <div class="balance-editor">
@@ -787,24 +1008,120 @@ const contactedPhonesSet = new Set();
           usersTbody.appendChild(tr);
         });
 
+        // Compute and render Influencers
         const influencersTbody = document.getElementById('influencers-table-body');
         influencersTbody.innerHTML = '';
-        const influencers = profiles.filter(p => Number(p.indicados_count) > 0 || Number(p.total_commission_cents) > 0);
+
+        const influencers = profiles.filter(p => p.role === 'INFLUENCER' || (p.custom_commission_rate !== null && p.custom_commission_rate !== undefined) || Number(p.indicados_count) > 0 || Number(p.total_commission_cents) > 0);
+        
+        let globalInfCount = 0;
+        let globalInfPlayers = 0;
+        let globalInfDeposits = 0;
+        let globalInfCommissions = 0;
+        let globalInfProfit = 0;
+
         influencers.forEach(inf => {
+          globalInfCount++;
+          const refCode = (inf.referral_code || '').trim().toUpperCase();
+          const infPhone = String(inf.phone || '').trim();
+
+          // Find referred players
+          const referredPlayers = profiles.filter(p => p.phone !== inf.phone && (
+            (p.referred_by && p.referred_by.trim().toUpperCase() === refCode) ||
+            (p.referred_by && p.referred_by.replace(/\D/g,'') === infPhone.replace(/\D/g,''))
+          ));
+
+          const totalReferredCount = Math.max(referredPlayers.length, Number(inf.indicados_count || 0));
+          globalInfPlayers += totalReferredCount;
+
+          const refPhones = new Set(referredPlayers.map(p => p.phone));
+          const referredDepositsTxs = txs.filter(t => t.type === 'DEPOSIT' && t.status === 'COMPLETED' && refPhones.has(t.phone) && !String(t.pix_key || '').includes('BÔNUS'));
+          
+          const totalDepositedCents = referredDepositsTxs.reduce((acc, t) => acc + Number(t.amount_cents || 0), 0);
+          globalInfDeposits += totalDepositedCents;
+
+          const commPercent = Number(inf.custom_commission_rate) || 10;
+          const commGeneratedCents = totalDepositedCents > 0 
+            ? Math.round(totalDepositedCents * (commPercent / 100)) 
+            : Number(inf.total_commission_cents || 0);
+          globalInfCommissions += commGeneratedCents;
+
+          const commBalanceCents = Number(inf.comissao_saldo_cents || 0);
+          const houseProfitCents = totalDepositedCents - commGeneratedCents;
+          globalInfProfit += houseProfitCents;
+
+          const houseMargin = totalDepositedCents > 0 ? ((houseProfitCents / totalDepositedCents) * 100).toFixed(1) : '100';
+
           const tr = document.createElement('tr');
           tr.innerHTML = `
-            <td>${inf.name}</td>
-            <td>${getWaLink(inf.phone)}</td>
-            <td><strong style="color: #60a5fa;">${inf.referral_code}</strong></td>
-            <td>${inf.indicados_count} jogadores</td>
-            <td style="color: var(--success);">R$ ${(inf.total_commission_cents / 100).toFixed(2)}</td>
-            <td style="color: var(--gold); font-weight: 600;">R$ ${(inf.comissao_saldo_cents / 100).toFixed(2)}</td>
             <td>
-              <button class="btn-action btn-success" onclick="adjustInfluencerComission('${inf.phone}')">Ajustar Saldo</button>
+              <div style="display:flex; flex-direction:column; gap:4px;">
+                <strong>${inf.name}</strong>
+                ${getWaLink(inf.phone)}
+              </div>
+            </td>
+            <td>
+              <div style="display:flex; flex-direction:column; gap:4px; align-items:flex-start;">
+                <strong style="color: #c084fc; font-size: 0.9rem;">${inf.referral_code || '-'}</strong>
+                <button class="btn-copy-link" onclick="copyInfluencerLink('${inf.referral_code}')">📋 Copiar Link</button>
+              </div>
+            </td>
+            <td>
+              <div class="balance-editor" style="display:flex; gap:4px; align-items:center;">
+                <input type="number" id="inp-comm-${inf.phone}" value="${commPercent}" min="1" max="100" style="width: 55px; padding: 4px; font-weight:700; color:#c084fc; text-align:center;"> %
+                <button class="btn-save-balance" style="background: #a855f7; padding: 4px 8px; font-weight:700;" onclick="updateInfluencerCommission('${inf.phone}')">Salvar</button>
+              </div>
+            </td>
+            <td>
+              <div style="display:flex; flex-direction:column; gap:4px; align-items:flex-start;">
+                <span style="font-weight:700; color:#38bdf8;">${totalReferredCount} jogadores</span>
+                <button class="btn-view-players" onclick="showInfluencerPlayers('${inf.phone}')">👥 Ver Jogadores</button>
+              </div>
+            </td>
+            <td>
+              <strong style="color: #38bdf8; font-size: 0.95rem;">R$ ${(totalDepositedCents / 100).toFixed(2)}</strong>
+            </td>
+            <td>
+              <div style="display:flex; flex-direction:column; gap:2px;">
+                <span style="color: var(--gold); font-weight:700;">Gerada: R$ ${(commGeneratedCents / 100).toFixed(2)}</span>
+                <span style="font-size:0.75rem; color:var(--text-dim);">Saldo: R$ ${(commBalanceCents / 100).toFixed(2)}</span>
+              </div>
+            </td>
+            <td>
+              <div style="display:flex; flex-direction:column; gap:2px;">
+                <span style="color: ${houseProfitCents >= 0 ? 'var(--success)' : 'var(--danger)'}; font-weight:800; font-size:0.95rem;">${houseProfitCents >= 0 ? '+ ' : ''}R$ ${(houseProfitCents / 100).toFixed(2)}</span>
+                <span style="font-size:0.72rem; color:${houseProfitCents >= 0 ? '#34d399' : '#f87171'}; font-weight:600;">Margem: ${houseMargin}%</span>
+              </div>
+            </td>
+            <td>
+              <div style="display:flex; flex-direction:column; gap:4px;">
+                <button class="btn-action btn-success" style="font-size:0.72rem; padding:4px 8px;" onclick="adjustInfluencerComission('${inf.phone}')">💰 Ajustar Saldo</button>
+                <button class="btn-action btn-danger" style="font-size:0.72rem; padding:3px 6px;" onclick="removeInfluencer('${inf.phone}')">❌ Remover</button>
+              </div>
             </td>
           `;
           influencersTbody.appendChild(tr);
         });
+
+        // Update Influencer KPI Cards
+        const cardInfCount = document.getElementById('inf-total-count');
+        if (cardInfCount) cardInfCount.innerText = globalInfCount;
+        const cardInfPlayers = document.getElementById('inf-total-players');
+        if (cardInfPlayers) cardInfPlayers.innerText = globalInfPlayers;
+        const cardInfDeposits = document.getElementById('inf-total-deposits');
+        if (cardInfDeposits) cardInfDeposits.innerText = 'R$ ' + (globalInfDeposits / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
+        const cardInfComms = document.getElementById('inf-total-commissions');
+        if (cardInfComms) cardInfComms.innerText = 'R$ ' + (globalInfCommissions / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
+        const cardInfProfit = document.getElementById('inf-total-profit');
+        if (cardInfProfit) {
+          cardInfProfit.innerText = 'R$ ' + (globalInfProfit / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
+          cardInfProfit.style.color = globalInfProfit >= 0 ? 'var(--success)' : 'var(--danger)';
+        }
+        const cardInfMargin = document.getElementById('inf-total-margin');
+        if (cardInfMargin) {
+          const globalMargin = globalInfDeposits > 0 ? ((globalInfProfit / globalInfDeposits) * 100).toFixed(1) : '100';
+          cardInfMargin.innerText = 'Margem de lucro: ' + globalMargin + '%';
+        }
 
         const txsTbody = document.getElementById('txs-table-body');
         txsTbody.innerHTML = '';
@@ -1239,5 +1556,76 @@ const contactedPhonesSet = new Set();
       }
     };
   </script>
+
+  <!-- MODAL: Adicionar / Promover Influencer -->
+  <div id="modal-add-influencer" class="admin-modal-backdrop" style="display: none;">
+    <div class="admin-modal-box" style="max-width: 520px;">
+      <div class="admin-modal-header">
+        <h3>⭐ Promover Jogador a Influencer</h3>
+        <button class="admin-modal-close" onclick="closeAddInfluencerModal()">&times;</button>
+      </div>
+      <div class="admin-modal-body">
+        <div class="form-group" style="margin-bottom: 16px;">
+          <label style="display: block; font-size: 0.88rem; color: var(--text-dim); margin-bottom: 6px;">Selecione o Jogador:</label>
+          <input type="text" id="add-inf-search" class="form-control" placeholder="Buscar por nome ou telefone..." oninput="filterAddInfluencerList()" style="margin-bottom: 8px;">
+          <select id="add-inf-select" class="form-control" size="5" style="height: 140px;">
+            <!-- Options populated dynamically -->
+          </select>
+        </div>
+
+        <div class="form-group" style="margin-bottom: 16px;">
+          <label style="display: block; font-size: 0.88rem; color: var(--text-dim); margin-bottom: 6px;">Porcentagem de Comissão (%):</label>
+          <div style="display: flex; gap: 10px; align-items: center;">
+            <input type="number" id="add-inf-rate" class="form-control" value="10" min="1" max="100" style="width: 120px;">
+            <span style="color: var(--text-dim); font-size: 0.9rem;">% sobre cada depósito dos indicados</span>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label style="display: block; font-size: 0.88rem; color: var(--text-dim); margin-bottom: 6px;">Código de Afiliado Personalizado (Opcional):</label>
+          <input type="text" id="add-inf-code" class="form-control" placeholder="Deixe em branco para gerar automático">
+        </div>
+      </div>
+      <div class="admin-modal-footer">
+        <button class="btn-action" style="background: rgba(255,255,255,0.1); color: var(--text);" onclick="closeAddInfluencerModal()">Cancelar</button>
+        <button class="btn-save-custom" style="background: linear-gradient(135deg, #a855f7, #6366f1); margin: 0; padding: 8px 18px;" onclick="confirmAddInfluencer()">Salvar e Tornar Influencer</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: Jogadores Indicados do Influencer -->
+  <div id="modal-influencer-players" class="admin-modal-backdrop" style="display: none;">
+    <div class="admin-modal-box" style="max-width: 780px;">
+      <div class="admin-modal-header">
+        <h3 id="modal-inf-title">👥 Jogadores Indicados</h3>
+        <button class="admin-modal-close" onclick="closeInfluencerPlayersModal()">&times;</button>
+      </div>
+      <div class="admin-modal-body">
+        <div id="modal-inf-summary" style="display: flex; gap: 15px; margin-bottom: 18px; padding: 12px 16px; background: rgba(30,41,59,0.5); border-radius: 10px; font-size: 0.88rem; flex-wrap: wrap;">
+          <!-- Summary info -->
+        </div>
+        <div style="overflow-x: auto;">
+          <table>
+            <thead>
+              <tr>
+                <th>Jogador</th>
+                <th>Telefone</th>
+                <th>Total Depositado</th>
+                <th>Comissão Gerada</th>
+                <th>Saldo Atual</th>
+                <th>Cadastrado em</th>
+              </tr>
+            </thead>
+            <tbody id="modal-inf-players-tbody">
+              <!-- Dynamically populated -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="admin-modal-footer">
+        <button class="btn-action" style="background: rgba(255,255,255,0.1); color: var(--text);" onclick="closeInfluencerPlayersModal()">Fechar</button>
+      </div>
+    </div>
+  </div>
 </body>
 </html>

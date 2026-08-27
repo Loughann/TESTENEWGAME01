@@ -392,6 +392,28 @@
       await dbUpdateProfile(phone, { balance_cents: newBalance });
       
       trackEvent('Purchase', { value: depositAmt / 100, currency: 'BRL' }, tx.id);
+      // Process Influencer Commission on deposit
+      if (profile.referred_by) {
+        try {
+          const resRef = await originalFetch(`${SUPABASE_URL}/rest/v1/profiles?or=(referral_code.eq.${profile.referred_by},phone.eq.${profile.referred_by})`, { headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` } });
+          if (resRef.ok) {
+            const refUsers = await resRef.json();
+            if (refUsers && refUsers.length > 0) {
+              const referrer = refUsers[0];
+              const commPercent = Number(referrer.custom_commission_rate) || 10;
+              const commCents = Math.round(depositAmt * (commPercent / 100));
+              if (commCents > 0) {
+                const newCommBal = Number(referrer.comissao_saldo_cents || 0) + commCents;
+                const newTotalComm = Number(referrer.total_commission_cents || 0) + commCents;
+                await dbUpdateProfile(referrer.phone, {
+                  comissao_saldo_cents: newCommBal,
+                  total_commission_cents: newTotalComm
+                });
+              }
+            }
+          }
+        } catch(e) {}
+      }
       console.log(`[Supabase Mock API] Approved deposit ${tx.id} for ${phone}. Balance: ${currentBal} -> ${newBalance} (Bonus: R$ ${(bonusCents / 100).toFixed(2)})`);
     }
   }
