@@ -491,15 +491,23 @@
           referred_by: null
         };
 
-        if (referralCode) {
-          const resRef = await originalFetch(`${SUPABASE_URL}/rest/v1/profiles?referral_code=eq.${referralCode.trim().toUpperCase()}`, { headers: supabaseHeaders });
-          if (resRef.ok) {
-            const dataRef = await resRef.json();
-            const referrer = dataRef[0];
-            if (referrer) {
-              newUser.referred_by = referrer.phone;
-              await dbUpdateProfile(referrer.phone, { indicados_count: referrer.indicados_count + 1 });
+        const refToUse = (referralCode || localStorage.getItem('blockcash_ref') || sessionStorage.getItem('blockcash_ref') || new URLSearchParams(window.location.search).get('ref') || new URLSearchParams(window.location.search).get('r') || '').trim().toUpperCase();
+        
+        if (refToUse) {
+          try {
+            const resRef = await originalFetch(`${SUPABASE_URL}/rest/v1/profiles?or=(referral_code.eq.${encodeURIComponent(refToUse)},phone.eq.${encodeURIComponent(refToUse)})`, { headers: supabaseHeaders });
+            if (resRef.ok) {
+              const dataRef = await resRef.json();
+              const referrer = dataRef && dataRef.length > 0 ? dataRef[0] : null;
+              if (referrer && referrer.phone !== cleanPhone) {
+                newUser.referred_by = referrer.phone;
+                const newCount = Number(referrer.indicados_count || 0) + 1;
+                await dbUpdateProfile(referrer.phone, { indicados_count: newCount });
+                console.log(`[Supabase Mock API] User ${cleanPhone} registered with referrer: ${referrer.name} (${referrer.phone})`);
+              }
             }
+          } catch(eRef) {
+            console.error('[Supabase Mock API] Error linking referrer:', eRef);
           }
         }
 

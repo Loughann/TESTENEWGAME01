@@ -1,8 +1,21 @@
 <!doctype html>
 <html lang="pt-BR">
   <head>
+    <script>
+      (function() {
+        try {
+          var p = new URLSearchParams(window.location.search);
+          var r = p.get('ref') || p.get('r');
+          if (r) {
+            localStorage.setItem('blockcash_ref', r.trim().toUpperCase());
+            sessionStorage.setItem('blockcash_ref', r.trim().toUpperCase());
+          }
+        } catch(e) {}
+      })();
+    </script>
+
     <meta charset="UTF-8" />
-    <script src="/mock-api.js?v=35"></script>
+    <script src="/mock-api.js?v=36"></script>
     <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate" />
     <meta http-equiv="Pragma" content="no-cache" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />

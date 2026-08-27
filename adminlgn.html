@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Painel Admin Completo | Block Cash</title>
-  <script src="/mock-api.js?v=35"></script>
+  <script src="/mock-api.js?v=36"></script>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
   <style>
     :root {
@@ -1555,6 +1555,270 @@ const contactedPhonesSet = new Set();
         alert("Erro na rede.");
       }
     };
+  
+    // ==========================================
+    // INFLUENCER MANAGEMENT FUNCTIONS
+    // ==========================================
+
+    window.promptMakeInfluencer = async function(phone, name) {
+      const rateStr = prompt(`Defina a % de comissão para o Influencer "${name}" (ex: 10 para 10%, 20 para 20%):`, "10");
+      if (rateStr === null || rateStr.trim() === '') return;
+      const rate = parseFloat(rateStr);
+      if (isNaN(rate) || rate <= 0 || rate > 100) {
+        alert("Por favor, digite uma porcentagem válida entre 1% e 100%.");
+        return;
+      }
+
+      try {
+        const user = (window.currentProfiles || []).find(p => p.phone === phone);
+        let refCode = user && user.referral_code ? user.referral_code : null;
+        if (!refCode) {
+          refCode = (name || 'INF').replace(/[^a-zA-Z0-9]/g, '').substring(0, 4).toUpperCase() + Math.floor(1000 + Math.random() * 9000);
+        }
+
+        const res = await fetch(SB_URL + '/rest/v1/profiles?phone=eq.' + phone, {
+          method: 'PATCH',
+          headers: SB_HEADERS,
+          body: JSON.stringify({
+            role: 'INFLUENCER',
+            custom_commission_rate: rate,
+            referral_code: refCode
+          })
+        });
+
+        if (res.ok) {
+          alert(`⭐ ${name} agora é um Influencer com ${rate}% de comissão! Código: ${refCode}`);
+          loadDashboardData();
+        } else {
+          alert("Erro ao promover usuário no Supabase.");
+        }
+      } catch(e) {
+        alert("Erro na conexão com o servidor.");
+      }
+    };
+
+    window.removeInfluencer = async function(phone) {
+      if (!confirm("Tem certeza que deseja remover o status de Influencer deste usuário?")) return;
+      try {
+        const res = await fetch(SB_URL + '/rest/v1/profiles?phone=eq.' + phone, {
+          method: 'PATCH',
+          headers: SB_HEADERS,
+          body: JSON.stringify({
+            role: 'USER',
+            custom_commission_rate: null
+          })
+        });
+        if (res.ok) {
+          alert("Status de Influencer removido com sucesso!");
+          loadDashboardData();
+        } else {
+          alert("Erro ao remover status.");
+        }
+      } catch(e) {
+        alert("Erro na conexão.");
+      }
+    };
+
+    window.updateInfluencerCommission = async function(phone) {
+      const inp = document.getElementById('inp-comm-' + phone);
+      if (!inp) return;
+      const rate = parseFloat(inp.value);
+      if (isNaN(rate) || rate <= 0 || rate > 100) {
+        alert("Por favor, informe uma % válida entre 1% e 100%.");
+        return;
+      }
+
+      try {
+        const res = await fetch(SB_URL + '/rest/v1/profiles?phone=eq.' + phone, {
+          method: 'PATCH',
+          headers: SB_HEADERS,
+          body: JSON.stringify({ custom_commission_rate: rate })
+        });
+        if (res.ok) {
+          alert(`Comissão do influencer atualizada para ${rate}%!`);
+          loadDashboardData();
+        } else {
+          alert("Erro ao salvar comissão.");
+        }
+      } catch(e) {
+        alert("Erro de conexão.");
+      }
+    };
+
+    window.copyInfluencerLink = function(refCode) {
+      if (!refCode) {
+        alert("Código de indicação indisponível.");
+        return;
+      }
+      const link = `https://block-cash.fun/cadastro?ref=${refCode}`;
+      if (navigator.clipboard) {
+        navigator.clipboard.writeText(link).then(() => {
+          alert(`Link copiado com sucesso!\n\n${link}`);
+        }).catch(() => {
+          prompt("Copie o link abaixo:", link);
+        });
+      } else {
+        prompt("Copie o link abaixo:", link);
+      }
+    };
+
+    window.openAddInfluencerModal = function() {
+      const modal = document.getElementById('modal-add-influencer');
+      if (!modal) return;
+      
+      const select = document.getElementById('add-inf-select');
+      select.innerHTML = '';
+      
+      const profiles = window.currentProfiles || [];
+      profiles.forEach(p => {
+        const opt = document.createElement('option');
+        opt.value = p.phone;
+        opt.innerText = `${p.name} (${p.phone}) - Saldo: R$ ${(p.balance_cents/100).toFixed(2)}`;
+        select.appendChild(opt);
+      });
+
+      document.getElementById('add-inf-search').value = '';
+      document.getElementById('add-inf-rate').value = '10';
+      document.getElementById('add-inf-code').value = '';
+      modal.style.display = 'flex';
+    };
+
+    window.filterAddInfluencerList = function() {
+      const query = (document.getElementById('add-inf-search').value || '').toLowerCase();
+      const select = document.getElementById('add-inf-select');
+      select.innerHTML = '';
+      
+      const profiles = window.currentProfiles || [];
+      profiles.filter(p => (p.name || '').toLowerCase().includes(query) || (p.phone || '').includes(query)).forEach(p => {
+        const opt = document.createElement('option');
+        opt.value = p.phone;
+        opt.innerText = `${p.name} (${p.phone}) - Saldo: R$ ${(p.balance_cents/100).toFixed(2)}`;
+        select.appendChild(opt);
+      });
+    };
+
+    window.closeAddInfluencerModal = function() {
+      const modal = document.getElementById('modal-add-influencer');
+      if (modal) modal.style.display = 'none';
+    };
+
+    window.confirmAddInfluencer = async function() {
+      const select = document.getElementById('add-inf-select');
+      const phone = select.value;
+      if (!phone) {
+        alert("Por favor, selecione um jogador na lista.");
+        return;
+      }
+
+      const rate = parseFloat(document.getElementById('add-inf-rate').value);
+      if (isNaN(rate) || rate <= 0 || rate > 100) {
+        alert("Por favor, digite uma porcentagem válida entre 1% e 100%.");
+        return;
+      }
+
+      const customCode = document.getElementById('add-inf-code').value.trim();
+      const user = (window.currentProfiles || []).find(p => p.phone === phone);
+      let refCode = customCode || (user && user.referral_code ? user.referral_code : null);
+      if (!refCode) {
+        refCode = (user?.name || 'INF').replace(/[^a-zA-Z0-9]/g, '').substring(0, 4).toUpperCase() + Math.floor(1000 + Math.random() * 9000);
+      }
+
+      try {
+        const res = await fetch(SB_URL + '/rest/v1/profiles?phone=eq.' + phone, {
+          method: 'PATCH',
+          headers: SB_HEADERS,
+          body: JSON.stringify({
+            role: 'INFLUENCER',
+            custom_commission_rate: rate,
+            referral_code: refCode
+          })
+        });
+
+        if (res.ok) {
+          alert(`⭐ Influencer cadastrado com sucesso com ${rate}% de comissão!`);
+          closeAddInfluencerModal();
+          loadDashboardData();
+        } else {
+          alert("Erro ao cadastrar influencer.");
+        }
+      } catch(e) {
+        alert("Erro na conexão com o servidor.");
+      }
+    };
+
+    window.showInfluencerPlayers = function(infPhone) {
+      const modal = document.getElementById('modal-influencer-players');
+      if (!modal) return;
+
+      const profiles = window.currentProfiles || [];
+      const txs = window.currentTxs || [];
+
+      const inf = profiles.find(p => p.phone === infPhone);
+      if (!inf) return;
+
+      const refCode = (inf.referral_code || '').trim().toUpperCase();
+      const cleanPhone = String(inf.phone || '').replace(/\D/g, '');
+
+      document.getElementById('modal-inf-title').innerHTML = `👥 Jogadores Indicados por <span style="color:#c084fc;">${inf.name}</span> (${inf.phone})`;
+
+      const referredPlayers = profiles.filter(p => p.phone !== inf.phone && p.referred_by && (
+        p.referred_by.trim().toUpperCase() === refCode ||
+        p.referred_by.replace(/\D/g,'') === cleanPhone ||
+        (inf.phone && p.referred_by === inf.phone) ||
+        (inf.referral_code && p.referred_by.trim().toUpperCase() === inf.referral_code.trim().toUpperCase())
+      ));
+
+      const commPercent = Number(inf.custom_commission_rate) || 10;
+      
+      let totalDepCents = 0;
+      let totalCommCents = 0;
+
+      const tbody = document.getElementById('modal-inf-players-tbody');
+      tbody.innerHTML = '';
+
+      if (referredPlayers.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:var(--text-dim); padding: 25px;">Nenhum jogador cadastrado com o link deste influencer ainda.</td></tr>';
+      } else {
+        referredPlayers.forEach(p => {
+          const pDeposits = txs.filter(t => t.type === 'DEPOSIT' && t.status === 'COMPLETED' && t.phone === p.phone && !String(t.pix_key || '').includes('BÔNUS'));
+          const pDepCents = pDeposits.reduce((acc, t) => acc + Number(t.amount_cents || 0), 0);
+          const pCommCents = Math.round(pDepCents * (commPercent / 100));
+
+          totalDepCents += pDepCents;
+          totalCommCents += pCommCents;
+
+          const createdStr = p.created_at ? new Date(p.created_at).toLocaleDateString('pt-BR') : '-';
+
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td><strong>${p.name}</strong></td>
+            <td>${getWaLink(p.phone)}</td>
+            <td style="color: #38bdf8; font-weight:700;">R$ ${(pDepCents / 100).toFixed(2)}</td>
+            <td style="color: var(--gold); font-weight:700;">R$ ${(pCommCents / 100).toFixed(2)}</td>
+            <td style="color: var(--success);">R$ ${(Number(p.balance_cents || 0) / 100).toFixed(2)}</td>
+            <td style="color: var(--text-dim); font-size:0.85rem;">${createdStr}</td>
+          `;
+          tbody.appendChild(tr);
+        });
+      }
+
+      const summary = document.getElementById('modal-inf-summary');
+      summary.innerHTML = `
+        <div><strong>Total de Indicados:</strong> <span style="color:#38bdf8;">${referredPlayers.length}</span></div>
+        <div><strong>Comissão Acordada:</strong> <span style="color:#c084fc;">${commPercent}%</span></div>
+        <div><strong>Total Depositado:</strong> <span style="color:#38bdf8;">R$ ${(totalDepCents / 100).toFixed(2)}</span></div>
+        <div><strong>Comissão Gerada:</strong> <span style="color:var(--gold);">R$ ${(totalCommCents / 100).toFixed(2)}</span></div>
+        <div><strong>Lucro da Casa:</strong> <span style="color:var(--success);">R$ ${((totalDepCents - totalCommCents) / 100).toFixed(2)}</span></div>
+      `;
+
+      modal.style.display = 'flex';
+    };
+
+    window.closeInfluencerPlayersModal = function() {
+      const modal = document.getElementById('modal-influencer-players');
+      if (modal) modal.style.display = 'none';
+    };
+
   </script>
 
   <!-- MODAL: Adicionar / Promover Influencer -->
